@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
+export const ARTIFACT_PORT = 4174;
+export const ARTIFACT_URL = `http://127.0.0.1:${ARTIFACT_PORT}/`;
 
 // Sandboxes and CI images often ship a prebuilt Chromium that does not match the
 // browser revision this Playwright version would download. Point
@@ -28,11 +30,21 @@ export default defineConfig({
     },
   ],
   // Serves the built single-file artifact, so e2e exercises what actually ships.
-  webServer: {
-    command: `npx vite preview --port ${PORT} --strictPort`,
-    url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  // The second server hosts the Artifact-host repackaging of the same bundle.
+  webServer: [
+    {
+      command: `npx vite preview --port ${PORT} --strictPort`,
+      url: `http://127.0.0.1:${PORT}`,
+      reuseExistingServer: !process.env.CI,
+      stdout: 'ignore',
+      stderr: 'pipe',
+    },
+    {
+      command: `npx vite preview --outDir artifact --port ${ARTIFACT_PORT} --strictPort`,
+      url: `http://127.0.0.1:${ARTIFACT_PORT}`,
+      reuseExistingServer: !process.env.CI,
+      stdout: 'ignore',
+      stderr: 'pipe',
+    },
+  ],
 });
