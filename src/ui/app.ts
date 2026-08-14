@@ -38,7 +38,7 @@ const OVERLAY_COPY: Record<string, { title: string; body: string; action: string
   blocked: {
     title: 'Audio unavailable',
     body: 'MODESHIFT needs the Web Audio API. The run cannot start without it.',
-    action: null,
+    action: 'Try again',
   },
 };
 
@@ -137,18 +137,29 @@ export function createApp({ root, stage, engine, audio, registry }: AppOptions):
   renderOverlay('start');
 
   // --- the start gesture -------------------------------------------------
-  // Pointer Events only (CANON §8), and the AudioContext is constructed here,
-  // inside the gesture, never before it.
+  // The AudioContext is constructed here, inside the gesture, never before it.
+  //
+  // CANON §8's pointerdown rule governs discrete *game* input on the pads. The
+  // start button is UI chrome, and binding it to pointerdown alone made it a
+  // silent no-op for keyboard, assistive tech, and any host that activates a
+  // button with a synthetic click. Both are bound: pointerdown so touch unlocks
+  // audio at the earliest possible gesture, click so every other path works.
   let starting = false;
-  action.addEventListener('pointerdown', (event: PointerEvent) => {
-    event.preventDefault();
-    if (starting || (mode !== 'start' && mode !== 'fail')) return;
+
+  const beginRun = (): void => {
+    // The overlay being open is the authority on whether a start is wanted, so
+    // the click that trails a pointerdown cannot restart a live run.
+    if (starting || overlay.dataset['open'] !== 'true') return;
+    if (mode !== 'start' && mode !== 'fail' && mode !== 'blocked') return;
     starting = true;
     void (async () => {
       try {
         const state = await audio.unlock();
         if (state !== 'running') {
-          renderOverlay('blocked');
+          renderOverlay(
+            'blocked',
+            `MODESHIFT needs the Web Audio API. The audio context reported "${state}".`,
+          );
           return;
         }
         hideOverlay();
@@ -159,7 +170,13 @@ export function createApp({ root, stage, engine, audio, registry }: AppOptions):
         starting = false;
       }
     })();
-  });
+  };
+
+  // No preventDefault here: cancelling pointerdown suppresses the button's
+  // native focus and click behaviour, which is what broke the other paths.
+  // Zoom and text selection are already handled by `touch-action: none`.
+  action.addEventListener('pointerdown', beginRun);
+  action.addEventListener('click', beginRun);
 
   // --- engine wiring -----------------------------------------------------
   const labelFor = (id: string): string => registry.get(id)?.label ?? id;

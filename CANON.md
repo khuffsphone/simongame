@@ -233,8 +233,12 @@ Two quotas. Both are surfaced in the HUD at all times, not just when spent.
 
 ## 8. Mobile
 
-- **Pointer Events only.** No mouse or touch event handlers anywhere.
+- **Pointer Events only** for game input. No mouse or touch event handlers on
+  play surfaces.
 - Discrete input commits on `pointerdown`, not `pointerup` or `click`.
+- This governs the pads, not UI chrome. Chrome buttons (start, restart) also
+  bind `click`, so keyboard and assistive activation work; binding them to
+  `pointerdown` alone makes them silent no-ops (`decisions/0010`).
 - Interactive targets are **≥ 44 × 44 CSS px**.
 - Safe-area insets respected via `env(safe-area-inset-*)`.
 - `touch-action: none` on the play surface while a run is live, and only then.

@@ -183,6 +183,38 @@ the values are `10 → 504`, `23 → 259`, `24 → 250`, and the floor first bin
 **level 24**. The formula is unchanged and the code always matched it; the table
 is now corrected.
 
+## Post-report fix: the start button was a silent no-op
+
+Reported after this report was first written, and reproduced immediately.
+The start button was bound to `pointerdown` alone, applying CANON §8's
+discrete-input rule to UI chrome it was never written for:
+
+| Activation | Before | After |
+| --- | --- | --- |
+| mouse click | `PRESENTING` | `PRESENTING` |
+| focus + Enter | **`BOOT` — nothing** | `PRESENTING` |
+| Tab + Space | **`BOOT` — nothing** | `PRESENTING` |
+| dispatched `click` | **`BOOT` — nothing** | `PRESENTING` |
+
+Keyboard activation of a `<button>` fires `click`, never `pointerdown`, as does
+every assistive-technology and synthetic path. The handler also called
+`preventDefault()` on `pointerdown`, suppressing the button's native focus and
+click behaviour and deepening the hole. Failure mode was silence: no error, no
+feedback.
+
+Fixed in `decisions/0010` — chrome binds both events (pointerdown kept so iOS
+unlocks audio at the earliest gesture), no longer cancels pointerdown, and is
+guarded on overlay state so a tap cannot double-fire into a second run.
+`e2e/activation.spec.ts` pins all four paths plus keyboard reachability and the
+no-double-fire property. The audio-failure panel also gained a retry action and
+now names the context state it saw, instead of being a dead end.
+
+Worth noting what this says about the process: the audio gate was the failure I
+predicted and wrote up as a risk, and it was not the one that happened. The one
+that happened was an input path I never tested because CANON told me pointerdown
+was the rule, and I applied a game-surface rule to chrome without noticing the
+category error.
+
 ## What I would attack first if I were trying to break this
 
 1. **Input during a state the engine thinks is closed.** Capture listeners are
