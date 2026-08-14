@@ -1,0 +1,24 @@
+.grid--number .grid__pad {
+  background: #1b2233;
+  border: 2px solid #2f3b57;
+  display: grid;
+  place-items: center;
+}
+
+.grid--number .grid__digit {
+  font-size: clamp(2rem, 14vw, 4rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #cfe0ff;
+  line-height: 1;
+}
+
+.grid--number .grid__pad[data-presenting='true'] {
+  background: #2d4677;
+  border-color: #7aa5ff;
+  box-shadow: 0 0 28px 2px rgb(122 165 255 / 45%);
+}
+
+.grid--number .grid__pad[data-presenting='true'] .grid__digit {
+  color: #ffffff;
+}

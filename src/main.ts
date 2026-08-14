@@ -1,23 +1,33 @@
+import { createWebAudioService } from './core/audio';
+import { Engine } from './core/engine';
+import { normalizeSeed } from './core/rng';
+import { createDefaultRegistry } from './modalities';
+import { createApp } from './ui/app';
 import './styles.css';
 
-// Phase A scaffold boot shell.
-//
-// This file intentionally contains NO gameplay. The engine and the five
-// modalities are ported in Phase A step 3, against the contract written into
-// CANON.md — which cannot be written until ./legacy/index.html is available.
-// See docs/PHASE-A-STATUS.md.
+const root = document.querySelector<HTMLDivElement>('#app');
+if (!root) throw new Error('#app container missing from index.html');
 
-const app = document.querySelector<HTMLDivElement>('#app');
-if (!app) throw new Error('#app container missing from index.html');
+// ?seed= pins a deterministic run for repro (CANON §5).
+const pinnedSeed = normalizeSeed(new URLSearchParams(window.location.search).get('seed'));
 
-app.innerHTML = `
-  <main class="boot">
-    <h1 class="boot__title">MODESHIFT</h1>
-    <p class="boot__status" data-testid="boot-status">
-      Scaffold online. Engine not yet ported.
-    </p>
-  </main>
-`;
+const registry = createDefaultRegistry();
+const audio = createWebAudioService();
 
-// e2e boot marker: proves the inlined bundle parsed and executed.
-document.documentElement.dataset['appBooted'] = 'true';
+// The stage is created here because the engine needs it before the app shell
+// that displays it exists.
+const stage = document.createElement('main');
+stage.className = 'stage';
+stage.dataset['testid'] = 'stage';
+
+const engine = new Engine({
+  registry,
+  stage,
+  audio,
+  visibility: document,
+  pinnedSeed,
+  reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+});
+
+createApp({ root, stage, engine, audio, registry });
+engine.mount();

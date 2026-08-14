@@ -1,0 +1,53 @@
+.grid {
+  display: none;
+  grid-template-columns: repeat(2, 1fr);
+  gap: clamp(0.5rem, 3vw, 1rem);
+  width: 100%;
+  height: 100%;
+  place-content: center;
+}
+
+.grid[data-active='true'] {
+  display: grid;
+}
+
+.grid__pad {
+  /* CANON §8: interactive targets are at least 44x44 CSS px. */
+  min-width: 44px;
+  min-height: 44px;
+  aspect-ratio: 1;
+  border: none;
+  border-radius: clamp(0.75rem, 4vw, 1.5rem);
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0.42;
+  transform: scale(0.97);
+  transition:
+    opacity 90ms ease-out,
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out;
+}
+
+.grid__pad[data-presenting='true'] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.grid[data-armed='true'] .grid__pad:active {
+  opacity: 0.9;
+  transform: scale(0.94);
+}
+
+.grid[data-armed='false'] .grid__pad {
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid__pad {
+    transition-duration: 0ms;
+  }
+}

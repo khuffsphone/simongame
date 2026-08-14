@@ -1,0 +1,122 @@
+.app {
+  /* CANON §8: 100dvh and safe-area insets. */
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 0.5rem;
+  padding:
+    max(0.5rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    max(0.5rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+  position: relative;
+}
+
+/* touch-action is suppressed only while a run is live. */
+.app[data-running='true'] .stage {
+  touch-action: none;
+}
+
+.hud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  font-size: 0.75rem;
+}
+
+.hud__cell {
+  display: flex;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+
+.hud__label {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.62rem;
+}
+
+.hud__value {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+}
+
+.hud__value[data-substituted='true']::after {
+  content: '*';
+  color: var(--muted);
+}
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: stretch;
+  min-height: 0;
+}
+
+.mod-root {
+  grid-area: 1 / 1;
+  min-height: 0;
+}
+
+.seed {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(11 13 18 / 88%);
+  backdrop-filter: blur(2px);
+  padding: 1.5rem;
+  text-align: center;
+  z-index: 2;
+}
+
+.overlay[data-open='false'] {
+  display: none;
+}
+
+.overlay__panel {
+  display: grid;
+  gap: 1rem;
+  max-width: 28rem;
+}
+
+.overlay__title {
+  margin: 0;
+  font-size: clamp(1.75rem, 10vw, 3rem);
+  letter-spacing: 0.16em;
+  font-weight: 800;
+}
+
+.overlay__body {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.overlay__action {
+  justify-self: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.85rem 1.75rem;
+  border: 2px solid #7aa5ff;
+  border-radius: 999px;
+  background: transparent;
+  color: #cfe0ff;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.overlay__action:active {
+  background: rgb(122 165 255 / 18%);
+}

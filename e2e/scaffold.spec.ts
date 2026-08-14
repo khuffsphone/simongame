@@ -1,10 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-// Phase A scaffold e2e. The gameplay specs required by Phase A step 4
-// (tap-to-start audio unlock, level 1 completion, backgrounding/resume,
-// second-backgrounding run end) land with the engine port — they cannot be
-// written against a contract that does not exist yet.
-
 test('the built single-file artifact boots with no network requests', async ({ page }) => {
   const external: string[] = [];
   page.on('request', (request) => {
@@ -17,7 +12,27 @@ test('the built single-file artifact boots with no network requests', async ({ p
 
   await page.goto('/');
 
-  await expect(page.locator('html')).toHaveAttribute('data-app-booted', 'true');
-  await expect(page.getByTestId('boot-status')).toBeVisible();
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'BOOT');
+  await expect(page.getByTestId('overlay-action')).toBeVisible();
   expect(external, 'artifact must issue zero subresource requests').toEqual([]);
+});
+
+test('interactive targets meet the 44px minimum (CANON §8)', async ({ page }) => {
+  await page.goto('/');
+
+  const startButton = page.getByTestId('overlay-action');
+  const startBox = await startButton.boundingBox();
+  expect(startBox!.width).toBeGreaterThanOrEqual(44);
+  expect(startBox!.height).toBeGreaterThanOrEqual(44);
+
+  await startButton.tap();
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'PRESENTING');
+
+  const pads = page.locator('.grid[data-active="true"] .grid__pad');
+  await expect(pads).toHaveCount(4);
+  for (let i = 0; i < 4; i += 1) {
+    const box = await pads.nth(i).boundingBox();
+    expect(box!.width, `pad ${i} width`).toBeGreaterThanOrEqual(44);
+    expect(box!.height, `pad ${i} height`).toBeGreaterThanOrEqual(44);
+  }
 });

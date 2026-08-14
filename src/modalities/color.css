@@ -1,0 +1,20 @@
+.grid--color .grid__pad[data-color='0'] {
+  background: #2bb673;
+  box-shadow: 0 0 0 0 rgb(43 182 115 / 0%);
+}
+.grid--color .grid__pad[data-color='1'] {
+  background: #e2453c;
+}
+.grid--color .grid__pad[data-color='2'] {
+  background: #f2c53d;
+}
+.grid--color .grid__pad[data-color='3'] {
+  background: #3b82f6;
+}
+
+.grid--color .grid__pad[data-presenting='true'] {
+  box-shadow:
+    0 0 0 3px rgb(255 255 255 / 55%),
+    0 0 32px 4px currentcolor;
+  filter: brightness(1.25);
+}
