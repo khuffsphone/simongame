@@ -2,7 +2,20 @@
 
 export const BASE_PACE_MS = 800;
 export const PACE_DECAY_PER_LEVEL = 0.95;
-export const PACE_FLOOR_MS = 250;
+
+/**
+ * The perception floor (decisions/0018).
+ *
+ * Was 250 ms. Two knobs were turning the same way: the cognitive budget grows
+ * every level *and* the pace decayed toward a quarter-second, so past roughly
+ * level 10 each step got both more numerous and harder to see. That is not a
+ * memory game getting harder, it is a perception test replacing it — a player
+ * who could hold the sequence still failed, because they never encoded it.
+ *
+ * Length is now the only knob that climbs without bound. 400 ms is enough to
+ * recognise a pad and commit it; below that, exposure, not recall, decides.
+ */
+export const PACE_FLOOR_MS = 400;
 
 function assertLevel(level: number): void {
   if (!Number.isInteger(level) || level < 1) {
@@ -10,13 +23,7 @@ function assertLevel(level: number): void {
   }
 }
 
-/** stepsForLevel(n) = n <= 5 ? n + 2 : floor(n * 1.25) + 3 */
-export function stepsForLevel(level: number): number {
-  assertLevel(level);
-  return level <= 5 ? level + 2 : Math.floor(level * 1.25) + 3;
-}
-
-/** paceForLevel(n) = max(250, round(800 * 0.95^(n - 1))) — floor binds at level 34. */
+/** paceForLevel(n) = max(400, round(800 * 0.95^(n - 1))) — floor binds at level 15. */
 export function paceForLevel(level: number): number {
   assertLevel(level);
   const decayed = BASE_PACE_MS * PACE_DECAY_PER_LEVEL ** (level - 1);

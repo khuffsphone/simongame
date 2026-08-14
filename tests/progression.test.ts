@@ -1,42 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { budgetForLevel } from '../src/content/curriculum';
 import {
   BASE_PACE_MS,
   PACE_FLOOR_MS,
   gapMsForPace,
   paceForLevel,
-  stepsForLevel,
 } from '../src/core/progression';
 
-describe('stepsForLevel (CANON §4)', () => {
-  it.each([
-    [1, 3],
-    [5, 7],
-    [6, 10],
-    [10, 15],
-    [20, 28],
-  ])('level %i has %i steps', (level, expected) => {
-    expect(stepsForLevel(level)).toBe(expected);
-  });
-
-  it('jumps at the level 5/6 boundary where the formula switches', () => {
-    expect(stepsForLevel(5)).toBe(7);
-    expect(stepsForLevel(6)).toBe(10);
-  });
-
-  it('never decreases as the level climbs', () => {
-    for (let level = 2; level <= 100; level += 1) {
-      expect(stepsForLevel(level)).toBeGreaterThanOrEqual(stepsForLevel(level - 1));
-    }
-  });
-
-  it('rejects a non-positive or fractional level', () => {
-    expect(() => stepsForLevel(0)).toThrow(RangeError);
-    expect(() => stepsForLevel(-1)).toThrow(RangeError);
-    expect(() => stepsForLevel(1.5)).toThrow(RangeError);
-  });
-});
-
 describe('paceForLevel (CANON §4)', () => {
+  it('rejects a non-positive or fractional level', () => {
+    expect(() => paceForLevel(0)).toThrow(RangeError);
+    expect(() => paceForLevel(-1)).toThrow(RangeError);
+    expect(() => paceForLevel(1.5)).toThrow(RangeError);
+  });
+
   it('starts at 800 ms', () => {
     expect(paceForLevel(1)).toBe(BASE_PACE_MS);
   });
@@ -45,20 +22,35 @@ describe('paceForLevel (CANON §4)', () => {
     [2, 760],
     [5, 652],
     [10, 504],
-    [20, 302],
+    [14, 411],
   ])('level %i paces at %i ms', (level, expected) => {
     expect(paceForLevel(level)).toBe(expected);
   });
 
-  it('clamps at the 250 ms floor, which first binds at level 24', () => {
-    expect(paceForLevel(23)).toBe(259);
-    expect(paceForLevel(24)).toBe(PACE_FLOOR_MS);
+  it('clamps at the 400 ms floor, which first binds at level 15', () => {
+    expect(paceForLevel(14)).toBe(411);
+    expect(paceForLevel(15)).toBe(PACE_FLOOR_MS);
     expect(paceForLevel(200)).toBe(PACE_FLOOR_MS);
   });
 
   it('is monotonically non-increasing', () => {
     for (let level = 2; level <= 120; level += 1) {
       expect(paceForLevel(level)).toBeLessThanOrEqual(paceForLevel(level - 1));
+    }
+  });
+
+  // decisions/0018: the defect was two knobs turning the same way. Past the
+  // floor exactly one of them may still move, and it must be length.
+  it('leaves length as the only difficulty knob once the floor binds', () => {
+    for (let level = 15; level <= 29; level += 1) {
+      expect(paceForLevel(level)).toBe(PACE_FLOOR_MS);
+      expect(budgetForLevel(level + 1)).toBeGreaterThan(budgetForLevel(level));
+    }
+  });
+
+  it('never drops below the threshold where a pad can be read and encoded', () => {
+    for (let level = 1; level <= 500; level += 1) {
+      expect(paceForLevel(level)).toBeGreaterThanOrEqual(400);
     }
   });
 });

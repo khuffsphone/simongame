@@ -104,29 +104,47 @@ Rules:
 
 ## 4. Progression
 
-### Steps per level — normative
+### Length per level — normative
+
+There is no `stepsForLevel`. Level length is derived from the cognitive budget
+below; `budgetForLevel(n)` carries the old formula, and the number of steps it
+buys depends on which modalities fill it.
 
 ```
-stepsForLevel(n) = n <= 5 ? n + 2 : floor(n * 1.25) + 3
+budgetForLevel(n) = n <= 5 ? n + 2 : floor(n * 1.25) + 3
 ```
 
-| n | 1 | 5 | 6 | 10 | 20 |
-| --- | --- | --- | --- | --- | --- |
-| `stepsForLevel(n)` | 3 | 7 | 10 | 15 | 28 |
+| n | 1 | 5 | 6 | 10 | 20 | 30 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `budgetForLevel(n)` | 3 | 7 | 10 | 15 | 28 | 40 |
 
 ### Pacing — normative
 
-Global pace starts at 800 ms/step and drops 5% per level, with a 250 ms floor:
+Global pace starts at 800 ms/step and drops 5% per level, with a **400 ms**
+floor:
 
 ```
-paceForLevel(n) = max(250, round(800 * 0.95^(n - 1)))
+paceForLevel(n) = max(400, round(800 * 0.95^(n - 1)))
 ```
 
-| n | 1 | 2 | 5 | 10 | 20 | 23 | 24 |
+| n | 1 | 2 | 5 | 10 | 14 | 15 | 30 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `paceForLevel(n)` | 800 | 760 | 652 | 504 | 302 | 259 | 250 |
+| `paceForLevel(n)` | 800 | 760 | 652 | 504 | 411 | 400 | 400 |
 
-The floor first binds at level 24.
+The floor first binds at level 15.
+
+> **Correction.** The floor was 250 ms, first binding at level 24. Two knobs
+> were turning the same way: the budget grows every level *and* exposure kept
+> shrinking, so past roughly level 10 the game stopped measuring recall and
+> started measuring perception — a player who could hold the sequence still
+> failed, because they were never given long enough to encode it.
+> **CANON was wrong.** See `decisions/0018`.
+
+**Length is the only difficulty knob that climbs without bound.** Once the
+pace floor binds, pace is constant; only the budget moves. This is tested.
+The budget's own 40-step cap binds at level 30 for an all-cheap pool, past
+which nothing increases — accepted, because a 40-item sequence is already far
+beyond human span and no measured run has reached it.
 
 The engine presents each step for:
 
@@ -194,11 +212,16 @@ can follow.
 
 ### Game modes and difficulty — §4a
 
-| Mode | Behaviour |
-| --- | --- |
-| Classic Climb | The level schedule above. |
-| Mixed Type | Every registered modality, every level, **level + 2** steps each: 3 apiece in phase 1, 4 in phase 2, 5 in phase 3. Grouped by modality, in registration order. |
-| *Modality* only | Every step is that modality, at the classic step count. One mode per registered modality, generated from the registry — adding a modality adds its mode for free. |
+> **Correction.** This table described "Classic Climb" and "Mixed Type", which
+> `src/core/modes.ts` has not implemented since the curriculum landed.
+> **CANON was stale**, not the code. Corrected below.
+
+| Mode | id | Behaviour |
+| --- | --- | --- |
+| Classic Circuit | `classic` | The teaching ladder above, budgeted. |
+| Quick Mix | `quickmix` | Every registered modality, interleaved, budget capped at **12** however far you climb. Short by construction. |
+| Marathon | `marathon` | Every registered modality, **level + 2** steps each, grouped by modality in registration order. Step-counted, not budgeted — the one mode that keeps the old behaviour on purpose. |
+| *Modality* only | the modality id | Every step is that modality, budgeted. One mode per registered modality, generated from the registry — adding a modality adds its mode for free. |
 
 Difficulty scales two things and nothing else:
 

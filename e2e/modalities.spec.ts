@@ -3,7 +3,6 @@ import {
   armedTransitions,
   glyphs,
   installSequenceObserver,
-  presented,
   startRun,
   tapPads,
   waitForAnyCapture,
