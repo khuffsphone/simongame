@@ -43,6 +43,25 @@ Genuinely independent surfaces do parallelise well: separate modules behind a
 plugin boundary, docs, distinct test suites, self-contained features with no
 shared visual or timing surface.
 
+## Fan out critics, not builders
+
+This is the synthesis that reconciles the evidence with the instinct to
+parallelise, and it is the single most useful reframing in this document.
+
+**Building is coupled, so it wants one owner.** Every builder spends from the
+same frame budget, palette, audio mix and attention budget. Parallel builders
+each pass locally and jointly fail.
+
+**Evaluation is genuinely independent.** Three critics with different lenses —
+readability, feel, accessibility — looking at the *same finished artifact* do
+not corrupt each other's assumptions, because none of them writes anything.
+There is no shared resource to exhaust. Disagreement between them is signal,
+not conflict.
+
+So the shape that works is: **one builder, many critics.** Fan out at the
+review step, converge at the write step. That gets the coverage and diversity
+people want from fan-out without the interference that makes it lose.
+
 ## Ownership boundaries, when you do fan out
 
 The discipline that made parallelism work at all in the reference project:

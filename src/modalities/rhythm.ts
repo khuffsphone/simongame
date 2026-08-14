@@ -1,4 +1,4 @@
-import { abortError, throwIfAborted, wait } from '../core/clock';
+import { abortError, throwIfAborted, wait, waitVisible } from '../core/clock';
 import type { Rng } from '../core/rng';
 import type { CaptureResult, Modality, ModalityServices, StepScore } from '../core/types';
 import './rhythm.css';
@@ -23,12 +23,33 @@ const BEAT_FLASH_MS = 120;
 /** Silence after the last tap that ends the capture. */
 const SILENCE_MS = 900;
 const MAX_TAPS = 16;
+/** A beat must survive this many painted frames to count as shown. */
+const MIN_FLASH_FRAMES = 2;
 const PASS_THRESHOLD = 0.75;
 /** Mean proportional deviation that scores zero. */
 const SHAPE_TOLERANCE = 0.18;
 
 export function patternFor(index: number): readonly number[] {
   return PATTERNS[index] ?? PATTERNS[0]!;
+}
+
+/**
+ * The value is an object rather than a bare index so each presented step can
+ * carry the intervals it *actually rendered*. Under load the demonstration
+ * stretches; scoring against the nominal pattern would then grade the player on
+ * a rhythm nobody played. Keying by object identity keeps replays and
+ * interleaved sequences correct, where a Map keyed by pattern index would
+ * collide (CANON §15, decisions/0016).
+ */
+export interface RhythmValue {
+  readonly pattern: number;
+}
+
+const RENDERED = new WeakMap<RhythmValue, number[]>();
+
+/** Test seam: what the last presentation of this value actually rendered. */
+export function renderedIntervalsFor(value: RhythmValue): readonly number[] | undefined {
+  return RENDERED.get(value);
 }
 
 export const RHYTHM_PATTERN_COUNT = PATTERNS.length;
@@ -65,15 +86,15 @@ export function scoreRhythm(captured: readonly number[], expected: readonly numb
   return { pass: rightLength && accuracy >= PASS_THRESHOLD, accuracy };
 }
 
-export class RhythmModality implements Modality<number, number[]> {
+export class RhythmModality implements Modality<RhythmValue, number[]> {
   static readonly id = 'rhythm';
   static readonly label = 'Rhythm';
   static readonly blurb = 'Tap back the beat.';
   static readonly minPresentMs = 260;
   static readonly captureTimeoutMs = 10000;
 
-  static generateValue(rng: Rng, _level: number): number {
-    return rng.nextInt(PATTERNS.length);
+  static generateValue(rng: Rng, _level: number): RhythmValue {
+    return { pattern: rng.nextInt(PATTERNS.length) };
   }
 
   #services: ModalityServices | null = null;
@@ -132,26 +153,35 @@ export class RhythmModality implements Modality<number, number[]> {
    * Presentation length is defined by the pattern, not by the engine's pace —
    * the intervals *are* the content. `durationMs` sets the flash length only.
    */
-  async presentStep(value: number, durationMs: number, signal: AbortSignal): Promise<void> {
+  async presentStep(value: RhythmValue, durationMs: number, signal: AbortSignal): Promise<void> {
     throwIfAborted(signal);
     const root = this.#root;
     const pad = this.#pad;
     if (!root || !pad || !this.#services) throw new Error('rhythm not mounted');
 
-    const pattern = patternFor(value);
+    const pattern = patternFor(value.pattern);
     const flash = Math.min(BEAT_FLASH_MS, Math.max(60, durationMs * 0.4));
-    root.dataset['stepValue'] = String(value);
+    root.dataset['stepValue'] = String(value.pattern);
+
+    // Onsets of the beats as they were actually painted, not as scheduled.
+    const onsets: number[] = [];
 
     try {
       // n intervals means n+1 beats.
       for (let beat = 0; beat <= pattern.length; beat += 1) {
         pad.dataset['presenting'] = 'true';
         this.#services.audio.tone({ freq: 440, durationMs: flash, type: 'square', gain: 0.3 });
-        await wait(this.#services.clock, flash, signal);
+        // waitVisible returns the timestamp of the frame the flash first
+        // painted on — that is the beat the player actually heard and saw.
+        onsets.push(await waitVisible(this.#services.clock, flash, signal, MIN_FLASH_FRAMES));
         pad.dataset['presenting'] = 'false';
         const gap = pattern[beat];
         if (gap !== undefined) await wait(this.#services.clock, Math.max(0, gap - flash), signal);
       }
+
+      const rendered: number[] = [];
+      for (let i = 1; i < onsets.length; i += 1) rendered.push(onsets[i]! - onsets[i - 1]!);
+      RENDERED.set(value, rendered);
     } finally {
       pad.dataset['presenting'] = 'false';
       delete root.dataset['stepValue'];
@@ -241,7 +271,15 @@ export class RhythmModality implements Modality<number, number[]> {
     });
   }
 
-  scoreStep(input: CaptureResult<number[]>, expected: number): StepScore {
-    return scoreRhythm(input.value, patternFor(expected));
+  /**
+   * Scored against the rendered performance when one was recorded. If a stall
+   * stretched the demonstration, the player is judged on what they saw — which
+   * is the only fair reading, and the difference between a hard level and an
+   * unwinnable one.
+   */
+  scoreStep(input: CaptureResult<number[]>, expected: RhythmValue): StepScore {
+    const rendered = RENDERED.get(expected);
+    const reference = rendered && rendered.length > 0 ? rendered : patternFor(expected.pattern);
+    return scoreRhythm(input.value, reference);
   }
 }

@@ -28,6 +28,14 @@ celebration, and — most importantly — the transition *out* of celebration in
 the next round of play. That last one is where the worst frames land on the
 beats the player most needs to see.
 
+**Measure with the expensive thing on screen.** The most common way this gate
+lies is by measuring nothing. If the FX loop correctly stops when idle — and it
+should — then an idle phase is free at *any* throttle, and measuring "splash
+idle" at 4× and again at 8× returns the same number twice. That result proves
+the idle path is idle and says nothing whatever about headroom. It is very easy
+to read it as "we have plenty of room" and be badly wrong. Always include a
+phase with particles live, and the transition out of it into play.
+
 **Mind the vsync ceiling.** A phase reporting a flat 16.7 ms is pinned at 60 fps
 and the measurement cannot see beneath it — a build with enormous headroom and
 one that is a single effect away from dropping frames report the same number.

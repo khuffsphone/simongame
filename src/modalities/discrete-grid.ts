@@ -1,4 +1,4 @@
-import { abortError, throwIfAborted, wait } from '../core/clock';
+import { abortError, throwIfAborted, waitVisible } from '../core/clock';
 import type { CaptureResult, Modality, ModalityServices, StepScore } from '../core/types';
 import './discrete-grid.css';
 
@@ -124,7 +124,9 @@ export abstract class DiscreteGridModality implements Modality<number> {
     });
 
     try {
-      await wait(this.services.clock, durationMs, signal);
+      // waitVisible, not wait: a flash the player never saw cannot be
+      // reproduced, so the cue must survive a stalled frame (CANON §10).
+      await waitVisible(this.services.clock, durationMs, signal);
     } finally {
       button.dataset['presenting'] = 'false';
       delete root.dataset['listening'];

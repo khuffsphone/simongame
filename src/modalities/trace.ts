@@ -1,4 +1,4 @@
-import { abortError, throwIfAborted, wait } from '../core/clock';
+import { abortError, throwIfAborted, waitVisible } from '../core/clock';
 import type { Rng } from '../core/rng';
 import type { CaptureResult, Modality, ModalityServices, StepScore } from '../core/types';
 import {
@@ -105,7 +105,7 @@ export class TraceModality implements Modality<string, Point[]> {
     this.#services.audio.tone({ freq: 587.33, durationMs: 220, type: 'triangle', gain: 0.3 });
 
     try {
-      await wait(this.#services.clock, durationMs, signal);
+      await waitVisible(this.#services.clock, durationMs, signal);
     } finally {
       // The glyph must be gone before capture — it is a memory game.
       this.#expected?.setAttribute('points', '');

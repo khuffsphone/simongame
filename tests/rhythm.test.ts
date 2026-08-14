@@ -9,9 +9,9 @@ describe('rhythm patterns', () => {
     const seen = new Set<number>();
     for (let i = 0; i < 400; i += 1) {
       const value = RhythmModality.generateValue(rng, 1);
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThan(RHYTHM_PATTERN_COUNT);
-      seen.add(value);
+      expect(value.pattern).toBeGreaterThanOrEqual(0);
+      expect(value.pattern).toBeLessThan(RHYTHM_PATTERN_COUNT);
+      seen.add(value.pattern);
     }
     expect(seen.size).toBe(RHYTHM_PATTERN_COUNT);
   });

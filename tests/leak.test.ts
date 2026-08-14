@@ -43,6 +43,26 @@ function createTurboClock(msPerFrame = 4000): Clock {
     cancel(handle) {
       pending.delete(handle);
     },
+    now() {
+      return now;
+    },
+    // Wall-clock waits collapse to a microtask so 50 levels still run fast.
+    timeout(callback, _ms) {
+      const handle = nextHandle;
+      nextHandle += 1;
+      pending.set(handle, () => callback());
+      queueMicrotask(() => {
+        const fn = pending.get(handle);
+        if (!fn) return;
+        pending.delete(handle);
+        now += msPerFrame;
+        callback();
+      });
+      return handle;
+    },
+    clearTimer(handle) {
+      pending.delete(handle as number);
+    },
   };
 }
 

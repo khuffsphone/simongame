@@ -22,6 +22,7 @@ function manualClock(): Clock & { step(ms: number): void; pending: number } {
   let next = 1;
   let now = 0;
   const queue = new Map<number, (t: number) => void>();
+  const timers = new Map<number, { at: number; cb: () => void }>();
   return {
     frame(callback) {
       const handle = next;
@@ -32,8 +33,26 @@ function manualClock(): Clock & { step(ms: number): void; pending: number } {
     cancel(handle) {
       queue.delete(handle);
     },
+    now() {
+      return now;
+    },
+    timeout(callback, ms) {
+      const handle = next;
+      next += 1;
+      timers.set(handle, { at: now + ms, cb: callback });
+      return handle;
+    },
+    clearTimer(handle) {
+      timers.delete(handle as number);
+    },
     step(ms: number) {
       now += ms;
+      for (const [handle, timer] of [...timers]) {
+        if (timer.at <= now) {
+          timers.delete(handle);
+          timer.cb();
+        }
+      }
       const due = [...queue.entries()];
       queue.clear();
       for (const [, cb] of due) cb(now);

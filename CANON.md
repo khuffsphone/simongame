@@ -296,9 +296,25 @@ stack is loud without clipping.
 
 ## 10. Timing and abort
 
-- All waiting is **rAF-driven**. No chained `setTimeout`, anywhere, ever.
-- Elapsed time comes from the timestamp rAF passes to its callback, not from a
-  separate clock read.
+> **Correction.** This section previously mandated rAF-driven waiting and
+> forbade `setTimeout` outright. **CANON was wrong**, not the code — the code
+> faithfully implemented a rule that causes a Severity-1 defect. Frame-derived
+> durations quantise to the frame rate, so on a slow device the game presents a
+> stretched pattern and grades against the nominal one, and no input can pass.
+> See `decisions/0016`.
+
+- **Wall-clock for logic; painted frames for anything the player must see.**
+  - `wait(clock, ms, signal)` is wall-clock. Use it for pacing gaps, capture
+    timeouts, and holds. It is unaffected by frame rate.
+  - `waitVisible(clock, ms, signal, minFrames)` satisfies **both** a duration
+    and a minimum painted-frame count, and resolves with the timestamp of the
+    first painted frame. Use it for every presented cue. A stall may stretch a
+    cue; it may never erase one.
+- Anything **scored against a rendered performance** records the onsets it
+  actually painted and scores against those. Grading a player on a schedule
+  they were not shown is the defect, not the stretching.
+- Wall-clock waits carry the same abort discipline rAF gave for free: the timer
+  is cleared and the listener removed on abort, so nothing fires late.
 - Every async method takes an `AbortSignal`.
 - **One owner creates and nulls each controller.** The engine owns the phase
   controller and the per-step controller; it creates them, aborts them, and
@@ -436,6 +452,14 @@ not aspirations (`tests/fx.test.ts`).
   count — `captureStep` is given no knowledge of what was expected, and a
   fixed-count terminator silently truncates longer patterns.
 - Scoring is tempo-invariant: both lists are converted to proportions of their
-  own total, so the right rhythm played fast still passes.
+  own total, so the right rhythm played fast still passes. Note this is **not**
+  sufficient protection against frame quantisation: onsets snap to frame
+  boundaries, so some intervals grow and others shrink, and the proportions
+  themselves drift. Tempo invariance rescues a uniform stretch, not a distorted
+  shape — which is why rendered-onset scoring is required as well.
+- The value is an object, not a bare index, so each presented step can carry
+  the intervals it actually rendered. Keying by object identity keeps replays
+  and interleaved sequences correct where a Map keyed by pattern index would
+  collide.
 - `accuracy = shape × (1 − countPenalty)`; `pass` additionally **requires the
   interval count to match exactly** (`decisions/0013`).
