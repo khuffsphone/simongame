@@ -61,13 +61,30 @@ export default [
     },
   },
   {
-    // The one that matters: full jackpot, particles live, immediately followed
-    // by the next sequence. This is where the worst frames land on the beats
-    // the player most needs to see.
-    name: 'jackpot + next sequence',
-    ms: 3500,
+    // The one that matters: full jackpot with particles live.
+    //
+    // The window is 900 ms, and that number is measured, not chosen. Probing
+    // the FX canvas for non-transparent pixels through this phase shows
+    // particles alive from 40 ms to 512 ms after the level clears, and dead
+    // for the rest. This phase used to sample 3500 ms — so ~85% of the frames
+    // in it were idle frames, p95 sat on an idle frame, and the statistic
+    // reported 16.7 ms no matter what the burst cost. It passed at 8x for the
+    // same reason "splash idle" passes at 8x.
+    //
+    // A percentile is only about the thing you are measuring if the thing you
+    // are measuring fills the window. Size the window to the effect, or read
+    // `worst` instead of `p95` and accept a noisier number.
+    name: 'jackpot (particles live)',
+    ms: 900,
     run: async (page) => {
       await clearLevelOne(page);
     },
+  },
+  {
+    // The tail: particles dead, next sequence presenting. Cheap by design, and
+    // here so a regression that leaves the FX loop running has somewhere to
+    // show up.
+    name: 'post-jackpot recovery',
+    ms: 2000,
   },
 ];

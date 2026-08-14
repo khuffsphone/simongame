@@ -36,12 +36,33 @@ the idle path is idle and says nothing whatever about headroom. It is very easy
 to read it as "we have plenty of room" and be badly wrong. Always include a
 phase with particles live, and the transition out of it into play.
 
-**Mind the vsync ceiling.** A phase reporting a flat 16.7 ms is pinned at 60 fps
-and the measurement cannot see beneath it — a build with enormous headroom and
-one that is a single effect away from dropping frames report the same number.
-Run a second pass at a harsher throttle (8×) to find the real margin. That
-number, not the passing one, tells you how much polish the build can afford, and
-it is worth knowing *before* the polish phase rather than after.
+**Size the window to the effect, or the percentile is about the wrong thing.**
+This is the second-order version of the same trap, and it survived the first
+fix. A phase named "jackpot", started right after the celebration fires, is
+still mostly idle if it samples for 3500 ms and the particles die after 500.
+p95 then lands on an idle frame and reports 16.7 ms however expensive the burst
+was — a phase with the right *name* and the wrong *content*.
+
+Do not guess the lifetime. Measure it: probe the effect's canvas for
+non-transparent pixels, or count live particles, across the window you intend
+to use, and check what fraction of samples are actually lit. In MODESHIFT the
+answer was 4 of 23 samples — 40 ms to 512 ms — so the 3500 ms window was 85%
+idle and the gate had been passing on that basis. The window is now 900 ms and
+the phase carries information. If an effect genuinely cannot fill a window
+large enough to be statistically stable, read `worst` instead of `p95` and
+accept a noisier number.
+
+**Mind the vsync ceiling, and climb until it breaks.** A phase reporting a flat
+16.7 ms is pinned at 60 fps and the measurement cannot see beneath it — a build
+with enormous headroom and one that is a single effect away from dropping
+frames report the same number. Doubling the throttle and seeing no change is
+not evidence of headroom; it is evidence that the phase is not CPU-bound.
+
+The only honest margin statement is the throttle at which the build *fails*.
+Run the ladder — 4×, 8×, 16×, 24× — and report the first rung that breaks and
+which phase broke first. MODESHIFT holds 60 fps through 8× and breaks at 16×,
+where the jackpot phase goes to 26.2 ms mean / 50 ms p95 while idle phases are
+still clean. "Passes at 4×" says almost nothing next to that.
 
 **Diagnose with ablation, not intuition.** Disable one decorative layer at a
 time and re-measure. The result is usually surprising and always more useful

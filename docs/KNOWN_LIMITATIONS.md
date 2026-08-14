@@ -1,8 +1,9 @@
 # Known limitations
 
-Scope status as of run `20260814T182208Z-9146ace`. The gauntlet spec defines eight packets;
-this run completed Packet 0 and the core of Packet 2. Everything below is
-**not built**, and is listed so nothing reads as shipped that is not.
+Scope status as of `b80e729`. The gauntlet spec defines eight packets; the work
+so far covers Packet 0, the core of Packet 2, and three product defects fixed
+on top of it. Everything below is **not built**, and is listed so nothing reads
+as shipped that is not.
 
 ## Not implemented (gauntlet packets)
 
@@ -26,21 +27,42 @@ this run completed Packet 0 and the core of Packet 2. Everything below is
 Persistence remains at schema v2. No migration to a new schema was written, so
 no migration risk was introduced.
 
+## Product defects — fixed
+
+- ~~**Pace floor vs. length.**~~ Fixed in `801c57c`. Floor raised to 400 ms,
+  binding at level 15; length is now the only unbounded difficulty knob and
+  `tests/progression.test.ts` asserts it. `decisions/0018`.
+- ~~**`modalityAccuracy` is written and never read.**~~ Fixed in `e61519d`.
+  Per-modality adaptive assist scales presentation and capture time only,
+  disclosed by name every level. `decisions/0019`.
+- ~~**Failure reveals nothing.**~~ Fixed in `b80e729`. The overlay names the
+  answer and what the player gave. `decisions/0020`.
+
 ## Product defects verified in code but not yet fixed
 
-- **Pace floor vs. length.** `paceForLevel` decays to 250 ms while step counts
-  grow, so exposure shrinks as length grows. Past roughly level 10 this tests
-  perception more than recall. Raising the floor and growing length instead is
-  the recommended change; not made.
-- **`modalityAccuracy` is written and never read.** Every step records
-  per-modality accuracy to localStorage. Nothing consumes it. Adaptive
-  difficulty is one read away and is not implemented.
-- **Failure reveals nothing.** The fail overlay says "Wrong step." and does not
-  show what the correct answer was — the most frustrating possible ending.
 - **No reason to return.** No daily seed, no meta-progression, no persistence
-  of anything beyond best level and per-mode best.
+  of anything beyond best level, per-mode best, and the accuracy record.
 - **Classic ends at ten authored levels.** Levels 11+ keep drawing from the
   full pool rather than escalating pedagogy (`decisions/0017`).
+- **No earned mulligan.** One focus-loss replay per run and one pointercancel
+  retry per level exist; there is nothing the player can *earn*.
+
+## Gaps introduced by the fixes above, and deliberately left open
+
+- **The assist has no off switch a player can reach.** `createApp({adaptive:
+  false})` is wired and tested, and `adaptivityAllowed(mode)` refuses fixed
+  rulesets, but there is no Settings panel to expose either. Packet 1.
+  `decisions/0019`.
+- **Difficulty stops climbing at level 30 for an all-cheap pool**, where the
+  budget hits its 40-step cap and the pace floor has already bound. Accepted
+  rather than fixed: 40 items is far beyond human span and no measured run has
+  approached it. Recorded in CANON §4 rather than left as a surprise.
+- **The reveal is text, not a replay.** Re-showing the pad flash or redrawing
+  the glyph would be better than words, especially for trace. It needs a
+  modality to render while deactivated and the overlay to sit behind rather
+  than over the stage — a Packet 1 layout change. `decisions/0020`.
+- **`ModalityRecord.attempts` is fractional past 40 attempts** (the recency
+  EMA). Nothing formats it for display today; a future stats screen must round.
 
 ## UNVERIFIED
 
