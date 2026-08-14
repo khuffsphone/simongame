@@ -33,6 +33,24 @@ export function patternFor(index: number): readonly number[] {
   return PATTERNS[index] ?? PATTERNS[0]!;
 }
 
+/** A gap counts as long once it is this many times the shortest gap. */
+const LONG_GAP_RATIO = 1.6;
+
+/**
+ * Intervals as a player would describe them out loud: how many taps, and the
+ * shape of the gaps between them. Absolute milliseconds would be precise and
+ * useless — nobody can act on "420, 420, 420".
+ */
+export function describePattern(intervals: readonly number[]): string {
+  const taps = intervals.length + 1;
+  if (intervals.length === 0) return `${taps} tap`;
+
+  const shortest = Math.min(...intervals);
+  const shape = intervals.map((ms) => (ms / shortest >= LONG_GAP_RATIO ? 'long' : 'short'));
+  if (shape.every((gap) => gap === 'short')) return `${taps} taps, evenly spaced`;
+  return `${taps} taps · ${shape.join(' · ')}`;
+}
+
 /**
  * The value is an object rather than a bare index so each presented step can
  * carry the intervals it *actually rendered*. Under load the demonstration
@@ -95,6 +113,21 @@ export class RhythmModality implements Modality<RhythmValue, number[]> {
 
   static generateValue(rng: Rng, _level: number): RhythmValue {
     return { pattern: rng.nextInt(PATTERNS.length) };
+  }
+
+  static describeValue(value: RhythmValue): string {
+    return describePattern(patternFor(value.pattern));
+  }
+
+  /**
+   * The intervals the player tapped, described the same way the answer is, so
+   * the two lines of the reveal are directly comparable. Tap count is called
+   * out first because a count mismatch is a hard fail (decisions/0013) and is
+   * far and away the most common way this modality is lost.
+   */
+  static describeCapture(capture: number[]): string {
+    if (capture.length === 0) return 'no taps';
+    return describePattern(capture);
   }
 
   #services: ModalityServices | null = null;

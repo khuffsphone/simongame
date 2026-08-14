@@ -63,7 +63,20 @@ export type EngineEvents = {
   };
   quota: { replays: number; retries: number };
   levelUp: { level: number; next: number };
-  fail: { reason: FailReason; level: number; seed: number };
+  fail: {
+    reason: FailReason;
+    level: number;
+    seed: number;
+    /**
+     * The step the run died on, so the UI can tell the player what the right
+     * answer was (CANON §6). Null for `focus-lost`, which is not about a step.
+     */
+    expected: SequenceStep | null;
+    /** What the player actually did. Null on a timeout — they did nothing. */
+    received: unknown;
+    /** Score of the failing step, or null when no step was scored. */
+    accuracy: number | null;
+  };
   error: { error: unknown };
 };
 
@@ -148,6 +161,9 @@ export class Engine {
   #replaySequence = false;
   #interrupt: 'pause' | 'fail' | null = null;
   #failReason: FailReason = 'wrong-step';
+  #failStep: SequenceStep | null = null;
+  #failReceived: unknown = null;
+  #failAccuracy: number | null = null;
   #resumeResolver: (() => void) | null = null;
   #loop: Promise<void> | null = null;
 
@@ -239,6 +255,8 @@ export class Engine {
     this.#retriesRemaining = RETRIES_PER_LEVEL;
     this.#replaySequence = false;
     this.#interrupt = null;
+    this.#failReason = 'wrong-step';
+    this.#clearFailContext();
     this.#combo = 0;
     this.#bestCombo = 0;
 
@@ -321,6 +339,8 @@ export class Engine {
           this.#interrupt = null;
           if (interrupt === 'fail') {
             this.#failReason = 'focus-lost';
+            // Not about a step: the player was not wrong, they were away.
+            this.#clearFailContext();
             this.#enterFail();
             return;
           }
@@ -446,6 +466,9 @@ export class Engine {
 
         if (outcome.kind === 'timeout') {
           this.#failReason = 'timeout';
+          this.#failStep = step;
+          this.#failReceived = null;
+          this.#failAccuracy = null;
           return 'fail';
         }
 
@@ -469,6 +492,9 @@ export class Engine {
         // 0 lives: the first wrong step ends the run immediately (CANON §6).
         if (!score.pass) {
           this.#failReason = 'wrong-step';
+          this.#failStep = step;
+          this.#failReceived = outcome.result.value;
+          this.#failAccuracy = score.accuracy;
           return 'fail';
         }
         this.#setState('CAPTURING');
@@ -540,6 +566,12 @@ export class Engine {
     this.#phaseController = this.#controllers.abortAndRelease(this.#phaseController);
   }
 
+  #clearFailContext(): void {
+    this.#failStep = null;
+    this.#failReceived = null;
+    this.#failAccuracy = null;
+  }
+
   #enterFail(): void {
     this.#alive = false;
     this.#deactivateAll();
@@ -548,7 +580,14 @@ export class Engine {
     this.#phaseController = null;
     this.#stepController = null;
     this.#setState('FAIL');
-    this.events.emit('fail', { reason: this.#failReason, level: this.#level, seed: this.#seed });
+    this.events.emit('fail', {
+      reason: this.#failReason,
+      level: this.#level,
+      seed: this.#seed,
+      expected: this.#failStep,
+      received: this.#failReceived,
+      accuracy: this.#failAccuracy,
+    });
   }
 
   // --- emission -----------------------------------------------------------

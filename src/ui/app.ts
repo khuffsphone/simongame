@@ -6,6 +6,7 @@ import { Persistence } from '../core/persistence';
 import type { ModalityRegistry } from '../core/registry';
 import { Fx } from '../fx/fx';
 import { justAppearedGuard, onActivate, onPrime } from './activate';
+import { describeFailure } from './reveal';
 import './app.css';
 
 // Screen router: SPLASH -> MENU -> GAME. The engine owns gameplay; this owns
@@ -401,18 +402,13 @@ export function createApp(options: AppOptions): { destroy: () => void } {
       });
     });
 
-    nextEngine.events.on('fail', ({ reason, level }) => {
+    nextEngine.events.on('fail', (payload) => {
       audio.cue('fail');
       vibrate(HAPTIC_FAIL, reducedMotion);
       fx.mount();
       fx.bust();
-      const why =
-        reason === 'timeout'
-          ? 'Out of time.'
-          : reason === 'focus-lost'
-            ? 'You left the game twice.'
-            : 'Wrong step.';
-      openOverlay('RUN OVER', `${why} You reached level ${level}.`, true);
+      const { title, body } = describeFailure(registry, payload);
+      openOverlay(title, body, true);
     });
 
     // The overlay opens mid-tap on a wrong pad, so its buttons appear under a

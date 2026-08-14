@@ -2,9 +2,12 @@ import { abortError, throwIfAborted, waitVisible } from '../core/clock';
 import type { Rng } from '../core/rng';
 import type { CaptureResult, Modality, ModalityServices, StepScore } from '../core/types';
 import {
+  MIN_ARC_LENGTH_PX,
+  MIN_SAMPLES,
   MIN_SAMPLE_SPACING_PX,
   TRACE_GLYPHS,
   TRACE_TEMPLATES,
+  arcLength,
   scoreTrace,
   toSvgPoints,
   type Point,
@@ -16,6 +19,16 @@ import './trace.css';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/** Template keys are identifiers; these are what a player would call them. */
+const GLYPH_NAMES: Readonly<Record<string, string>> = {
+  line: 'a straight line, left to right',
+  vee: 'a V',
+  ell: 'an L',
+  arc: 'an arc, left to right over the top',
+  zigzag: 'a zigzag',
+  wave: 'a wave',
+};
+
 export class TraceModality implements Modality<string, Point[]> {
   static readonly id = 'trace';
   static readonly label = 'Trace';
@@ -25,6 +38,22 @@ export class TraceModality implements Modality<string, Point[]> {
 
   static generateValue(rng: Rng, _level: number): string {
     return TRACE_GLYPHS[rng.nextInt(TRACE_GLYPHS.length)]!;
+  }
+
+  static describeValue(value: string): string {
+    return GLYPH_NAMES[value] ?? value;
+  }
+
+  /**
+   * A stroke cannot be named, so the reveal says what went wrong with it
+   * instead. The two guard rails come first because "you barely drew anything"
+   * is actionable and "your curve was slightly off" is not.
+   */
+  static describeCapture(capture: Point[]): string {
+    if (capture.length === 0) return 'nothing drawn';
+    if (capture.length < MIN_SAMPLES) return 'a tap, not a stroke';
+    if (arcLength(capture) < MIN_ARC_LENGTH_PX) return 'a stroke too short to read';
+    return `a ${capture.length}-point stroke`;
   }
 
   #services: ModalityServices | null = null;

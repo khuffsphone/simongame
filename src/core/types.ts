@@ -51,6 +51,24 @@ export interface ModalityClass<V = unknown, C = V> {
   readonly minPresentMs: number;
   readonly captureTimeoutMs: number;
   generateValue(rng: Rng, level: number): V;
+
+  /**
+   * The answer, in words the player can act on. Shown when a run ends (CANON
+   * §6). Required, not optional: a modality that cannot say what the right
+   * answer was is a modality that ends the game with "Wrong step." and nothing
+   * else, which is the most frustrating possible ending and exactly the defect
+   * this pair of methods exists to prevent.
+   *
+   * Short and concrete — "Blue", "the zigzag glyph" — never a sentence.
+   */
+  describeValue(value: V): string;
+
+  /**
+   * What the player actually did, in the same register. Separate from
+   * `describeValue` because capture and value are different types for trace
+   * (a stroke, not a glyph name) and rhythm (intervals, not a pattern index).
+   */
+  describeCapture(capture: C): string;
 }
 
 /** A modality class with its type parameters erased, as the engine stores them. */

@@ -73,6 +73,8 @@ loop, so one sequence can interleave modalities step by step.
 | `minPresentMs` | `number` | Floor on presentation time for one step of this modality |
 | `captureTimeoutMs` | `number` | Time budget for one captured step before a timeout fail |
 | `generateValue(rng, level)` | `(Rng, number) => V` | Produces one step value. **Cardinality lives in the modality**, not the engine |
+| `describeValue(value)` | `(V) => string` | The answer in words, for the failure reveal (§6). Required |
+| `describeCapture(capture)` | `(C) => string` | What the player did, in the same register. Required |
 
 ### Instance side (`Modality`)
 
@@ -314,6 +316,40 @@ See `decisions/0001`.
 - `FAIL` → `start()` resets to **level 1** with a **new seed**, unless `?seed=`
   pinned the run.
 - Score reported to the UI is the level reached, not a point total.
+
+### The run must reveal the answer — normative
+
+A run may not end without saying what the correct answer was. The `fail` event
+carries `expected` (the step it died on), `received` (what the player did), and
+`accuracy`; the overlay renders all three.
+
+This is not a hint and not a spoiler. The run is over, the sequence is spent,
+and the next run generates a different one — there is nothing left to protect,
+and withholding it means the player cannot tell a memory failure from a
+misperception. See `decisions/0020`.
+
+Both halves of the reveal are part of the modality contract (§3) and are
+**required**, not optional:
+
+```ts
+static describeValue(value: V): string     // "Blue", "a zigzag"
+static describeCapture(capture: C): string // what the player did
+```
+
+An optional method here would let a modality ship with no reveal, which is the
+defect. Two methods rather than one because value and capture are different
+types for trace (a stroke, not a glyph name) and rhythm (intervals, not a
+pattern index).
+
+Rules:
+
+- `focus-lost` reveals nothing. The player was not wrong, they were away.
+- A timeout reveals the answer and never claims an input that did not happen.
+- The attempt line is dropped when it would read identically to the answer —
+  trace and rhythm score by shape, so a failing attempt can legitimately carry
+  the same description.
+- A formatter that throws costs its own line and nothing else. The overlay
+  always opens.
 
 ---
 

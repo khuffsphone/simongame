@@ -20,6 +20,7 @@ export class SoundModality extends DiscreteGridModality {
   static readonly id = 'sound';
   static readonly label = 'Sound';
   static readonly blurb = 'Pitch only. No pad lights up.';
+  static override readonly answerLabels = ['G3, the lowest', 'C4', 'F4', 'C5, the highest'] as const;
   /** Longer than the visual modalities: a pitch needs time to be identified. */
   static readonly minPresentMs = 520;
   static readonly captureTimeoutMs = 4000;

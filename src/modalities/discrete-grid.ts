@@ -26,6 +26,24 @@ const MAX_TONE_MS = 420;
 const TAP_TONE_MS = 90;
 
 export abstract class DiscreteGridModality implements Modality<number> {
+  /**
+   * Answer labels by option index, for the failure reveal (CANON §6).
+   *
+   * A static rather than a read off `buildOptions()`, because the reveal is
+   * asked of the *class* after the run has ended and the instance has been
+   * torn down. Subclasses override it; `this` inside the statics below is the
+   * subclass the call came through.
+   */
+  static readonly answerLabels: readonly string[] = [];
+
+  static describeValue(value: number): string {
+    return this.answerLabels[value] ?? `option ${value + 1}`;
+  }
+
+  static describeCapture(capture: number): string {
+    return this.describeValue(capture);
+  }
+
   protected services: ModalityServices | null = null;
 
   #root: HTMLElement | null = null;

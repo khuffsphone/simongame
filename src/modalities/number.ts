@@ -15,6 +15,7 @@ export class NumberModality extends DiscreteGridModality {
   static readonly id = 'number';
   static readonly label = 'Number';
   static readonly blurb = 'Digits, not colours. Read fast.';
+  static override readonly answerLabels = ['1', '2', '3', '4'] as const;
   /** Longer than colour: reading a glyph is slower than identifying a hue. */
   static readonly minPresentMs = 400;
   static readonly captureTimeoutMs = 3000;

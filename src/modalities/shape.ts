@@ -31,6 +31,7 @@ export class ShapeModality extends DiscreteGridModality {
   static readonly id = 'shape';
   static readonly label = 'Shape';
   static readonly blurb = 'Silhouettes at speed.';
+  static override readonly answerLabels = ['Circle', 'Square', 'Triangle', 'Star'] as const;
   static readonly minPresentMs = 380;
   static readonly captureTimeoutMs = 3000;
 

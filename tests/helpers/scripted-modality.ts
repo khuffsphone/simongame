@@ -26,6 +26,14 @@ export class ScriptedModality implements Modality<number> {
     return rng.nextInt(ScriptedModality.cardinality);
   }
 
+  static describeValue(value: number): string {
+    return `value ${value}`;
+  }
+
+  static describeCapture(capture: number): string {
+    return `value ${capture}`;
+  }
+
   /** Every value ever presented, in order, across levels and replays. */
   readonly presented: number[] = [];
   /** The duration the engine asked for on each of those presentations. */

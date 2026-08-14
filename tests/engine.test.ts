@@ -100,7 +100,11 @@ describe('fail model (CANON §6)', () => {
 
     expect(harness.events.scores).toHaveLength(1);
     expect(harness.events.scores[0]?.pass).toBe(false);
-    expect(harness.events.fails).toEqual([{ reason: 'wrong-step', level: 1, seed: 20260814 }]);
+    // The fail carries the step it died on, so the UI can reveal the answer.
+    const [fail] = harness.events.fails;
+    expect(fail).toMatchObject({ reason: 'wrong-step', level: 1, seed: 20260814, accuracy: 0 });
+    expect(fail?.expected?.value).toBe(harness.modality.presented[0]);
+    expect(fail?.received).not.toBe(harness.modality.presented[0]);
     expect(harness.engine.state).toBe('FAIL');
   });
 
