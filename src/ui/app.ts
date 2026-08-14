@@ -6,6 +6,7 @@ import { Persistence } from '../core/persistence';
 import type { ModalityRegistry } from '../core/registry';
 import { Fx } from '../fx/fx';
 import { justAppearedGuard, onActivate, onPrime } from './activate';
+import { createHaptics, type Haptics } from './haptics';
 import { describeFailure } from './reveal';
 import './app.css';
 
@@ -22,15 +23,8 @@ export interface AppOptions {
   reducedMotion?: boolean;
   /** Master switch for the per-modality time assist (CANON §4b). */
   adaptive?: boolean;
-}
-
-const HAPTIC_STEP = 18;
-const HAPTIC_LEVEL = [40, 30, 60, 30, 90];
-const HAPTIC_FAIL = [90, 50, 140];
-
-function vibrate(pattern: number | number[], reducedMotion: boolean): void {
-  if (reducedMotion) return;
-  navigator.vibrate?.(pattern);
+  /** Injected in tests; defaults to the real vibration API (CANON §8a). */
+  haptics?: Haptics;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -48,6 +42,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
   const { root, audio, registry, fx } = options;
   const persistence = options.persistence ?? new Persistence();
   const reducedMotion = options.reducedMotion ?? false;
+  const haptics = options.haptics ?? createHaptics({ reducedMotion });
 
   let engine: Engine | null = null;
   let mode: GameMode = 'classic';
@@ -57,9 +52,17 @@ export function createApp(options: AppOptions): { destroy: () => void } {
   root.dataset['screen'] = 'splash';
 
   const teardownGame = (): void => {
+    // Only when a run is actually being torn down. This guard is load-bearing:
+    // every render calls teardownGame() first, including the render that a
+    // transition cue was just played for — so an unconditional cancel here
+    // killed the "start" buzz a millisecond after it began, and the player felt
+    // nothing on the one gesture that most needs to land.
+    const hadRun = engine !== null;
     engine?.destroy();
     engine = null;
     fx.clear();
+    // Vibration outlives the screen that started it unless something stops it.
+    if (hadRun) haptics.cancel();
   };
 
   // --- splash -------------------------------------------------------------
@@ -109,7 +112,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
         if (state === 'running') audio.cue('splash');
         fx.mount();
         fx.burst(window.innerWidth / 2, window.innerHeight * 0.62, 26);
-        vibrate(30, reducedMotion);
+        haptics.play('tap');
         renderMenu();
       });
     });
@@ -186,7 +189,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
         mode = id;
         syncSelection();
         audio.cue('menuTick');
-        vibrate(12, reducedMotion);
+        haptics.play('select');
         const box = card.getBoundingClientRect();
         fx.mount();
         fx.spark(box.left + box.width / 2, box.top + box.height / 2, 6);
@@ -198,7 +201,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
         difficulty = id;
         syncSelection();
         audio.cue('menuTick');
-        vibrate(12, reducedMotion);
+        haptics.play('select');
       });
     }
 
@@ -236,7 +239,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
           return;
         }
         audio.cue('start');
-        vibrate([30, 40, 60], reducedMotion);
+        haptics.play('start');
         renderGame();
       });
     });
@@ -336,6 +339,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
       if (state === 'CAPTURING') banner.textContent = 'Your turn';
       if (state === 'PAUSED') {
         audio.cue('pause');
+        haptics.cancel();
         openOverlay('Paused', 'You left mid-run. Come back and this level replays — once.', false);
       }
       if (state === 'LEVEL_SETUP' && overlay.dataset['open'] === 'true') closeOverlay();
@@ -377,7 +381,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
       persistence.recordScore(modalityId, pass, accuracy);
       if (!pass) return;
       audio.cue('correct', combo);
-      vibrate(HAPTIC_STEP, reducedMotion);
+      haptics.play('step');
       // Correct step: a short burst only, never a screen-filling effect.
       const rect = stage.getBoundingClientRect();
       fx.mount();
@@ -392,7 +396,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
     nextEngine.events.on('levelUp', ({ level }) => {
       const isBest = persistence.recordLevel(String(mode), level);
       audio.cue('levelUp', level);
-      vibrate(HAPTIC_LEVEL, reducedMotion);
+      haptics.play(isBest ? 'bestRun' : 'levelUp');
       fx.mount();
       fx.jackpot(1 + level * 0.12);
       banner.textContent = isBest ? `NEW BEST · LEVEL ${level}` : `LEVEL ${level} CLEAR`;
@@ -404,7 +408,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
 
     nextEngine.events.on('fail', (payload) => {
       audio.cue('fail');
-      vibrate(HAPTIC_FAIL, reducedMotion);
+      haptics.play('fail');
       fx.mount();
       fx.bust();
       const { title, body } = describeFailure(registry, payload);

@@ -386,6 +386,26 @@ Two quotas. Both are surfaced in the HUD at all times, not just when spent.
 
 ## 8. Mobile
 
+### Target platform — normative
+
+**Android, Chrome.** Decided by the product owner on 2026-08-14, after the
+question had been open since the first build (`decisions/0021`).
+
+iOS Safari is **not a target**. This is not a gap in coverage — it is a scope
+boundary, and it changes what counts as a defect. Anything that works on
+Android Chrome and not on iOS is out of scope until the target changes; the
+reverse is a bug.
+
+The decision resolves one feature outright: `navigator.vibrate` does not exist
+on iOS at any version, so haptics were unimplementable under an unstated
+target. On Android they work, which makes them a real feature with real
+hardware constraints — see §8a.
+
+Reference device profile for gates and screenshots: 390 × 844 CSS px, DPR 2,
+touch, mobile UA (Pixel 5 class).
+
+### Input and layout
+
 - **Pointer Events only** for game input. No mouse or touch event handlers on
   play surfaces.
 - Discrete input commits on `pointerdown`, not `pointerup` or `click`.
@@ -396,6 +416,33 @@ Two quotas. Both are surfaced in the HUD at all times, not just when spent.
 - Safe-area insets respected via `env(safe-area-inset-*)`.
 - `touch-action: none` on the play surface while a run is live, and only then.
 - Full-height layout uses `100dvh`.
+
+### Haptics — §8a
+
+Call sites request **intents**, never durations: `haptics.play('step')`. The
+patterns live in one table in `src/ui/haptics.ts`.
+
+| Constraint | Value | Why |
+| --- | --- | --- |
+| `MIN_PULSE_MS` | 20 | A vibration motor has to spin up. On the ERM motors common in mid-range Android hardware, a shorter pulse is not felt — the call succeeds and the player cannot tell haptics from silence. The step cue was 18 ms. |
+| `MAX_PULSE_MS` | 200 | A longer single buzz reads as a malfunction. |
+| `MAX_PATTERN_MS` | 1200 | Total, however many pulses. |
+
+Rules:
+
+- Patterns are `[pulse, pause, pulse, …]`. **Only pulses are clamped** — a 30 ms
+  silence is perfectly renderable, and lengthening gaps would smear the pattern.
+- A pattern never ends on a gap.
+- Every shipped pattern must survive clamping **unchanged**. If a pattern needs
+  clamping, the pattern is wrong; the clamp is a guard rail, not a laundry.
+- The per-step cue is exactly one pulse, so a fast run does not become a buzz.
+- `vibrate` is not stateless: each call replaces what is running. Haptics are
+  cancelled on pause and on run teardown — but **only when a run actually
+  existed**, because every render tears down first and an unconditional cancel
+  kills the transition cue that was just played for that render.
+- Nothing is dispatched before the document has sticky activation. Chrome
+  ignores it and warns; not calling is quieter and behaves identically.
+- Reduced motion mutes haptics along with animation.
 
 ---
 
