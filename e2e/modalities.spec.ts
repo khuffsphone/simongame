@@ -6,6 +6,7 @@ import {
   presented,
   startRun,
   tapPads,
+  waitForAnyCapture,
   waitForCapture,
 } from './helpers';
 
@@ -42,9 +43,23 @@ test('sound presentation never reveals which pad is playing', async ({ page }) =
 
 test('shape level 1 is completable', async ({ page }) => {
   await startRun(page, { mode: 'shape' });
-  await waitForCapture(page, 3);
-  await tapPads(page, await presented(page));
+  // Shape costs 1.1, so a level-1 budget of 3 buys two steps, not three.
+  const sequence = await waitForAnyCapture(page);
+  expect(sequence.length).toBeGreaterThan(0);
+  await tapPads(page, sequence);
   await expect(page.getByTestId('hud-level')).toHaveText('2');
+});
+
+test('an expensive modality generates fewer steps than a cheap one', async ({ page }) => {
+  // The cognitive budget in action: same level, very different step counts.
+  await startRun(page, { mode: 'color' });
+  const colour = await waitForAnyCapture(page);
+
+  await page.goto('/');
+  await startRun(page, { mode: 'trace' });
+  const trace = await waitForAnyCapture(page);
+
+  expect(trace.length).toBeLessThan(colour.length);
 });
 
 test('trace is real gameplay: the glyph is hidden, then redrawn from memory', async ({ page }) => {
@@ -55,7 +70,7 @@ test('trace is real gameplay: the glyph is hidden, then redrawn from memory', as
   const shown = (await glyphs(page))[0]!;
   expect(shown.length).toBeGreaterThan(0);
 
-  await waitForCapture(page, 3);
+  await waitForAnyCapture(page);
 
   // Once capture opens the template must be gone — it is a memory game.
   await expect(page.locator('.trace__expected')).toHaveAttribute('points', '');

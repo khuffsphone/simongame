@@ -1,0 +1,54 @@
+{
+  "config": {
+    "url": "http://127.0.0.1:4173",
+    "phases": "./.claude/skills/gauntlet-loop/scripts/example-phases.mjs",
+    "throttle": 8,
+    "budget": 33,
+    "width": 390,
+    "height": 844,
+    "dpr": 2,
+    "json": "artifacts/gauntlet/20260814T182208Z-9146ace/perf/candidate-8x.json"
+  },
+  "results": [
+    {
+      "phase": "splash idle",
+      "frames": 120,
+      "meanMs": 16.7,
+      "p95Ms": 16.8,
+      "worstMs": 16.8,
+      "approxFps": 60,
+      "budgetMs": 33,
+      "pass": true
+    },
+    {
+      "phase": "menu",
+      "frames": 121,
+      "meanMs": 16.7,
+      "p95Ms": 16.7,
+      "worstMs": 16.8,
+      "approxFps": 60,
+      "budgetMs": 33,
+      "pass": true
+    },
+    {
+      "phase": "presenting",
+      "frames": 179,
+      "meanMs": 16.7,
+      "p95Ms": 16.8,
+      "worstMs": 16.8,
+      "approxFps": 60,
+      "budgetMs": 33,
+      "pass": true
+    },
+    {
+      "phase": "jackpot + next sequence",
+      "frames": 211,
+      "meanMs": 16.7,
+      "p95Ms": 16.7,
+      "worstMs": 16.8,
+      "approxFps": 60,
+      "budgetMs": 33,
+      "pass": true
+    }
+  ]
+}

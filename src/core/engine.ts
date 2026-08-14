@@ -343,7 +343,13 @@ export class Engine {
   }
 
   #buildSequence(): SequenceStep[] {
-    const plan = buildModePlan(this.#mode, this.#level, this.#rng, this.#registry.ids());
+    const plan = buildModePlan(
+      this.#mode,
+      this.#level,
+      this.#rng,
+      this.#registry.ids(),
+      this.#difficulty,
+    );
     this.#plan = plan;
     return plan.steps.map((modalityId) => ({
       modalityId,

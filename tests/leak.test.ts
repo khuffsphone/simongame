@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createSilentAudioService } from '../src/core/audio';
 import type { Clock } from '../src/core/clock';
 import { Engine } from '../src/core/engine';
-import { stepsForLevel } from '../src/core/progression';
+import { MAX_STEPS, budgetForLevel } from '../src/content/curriculum';
 import { ModalityRegistry } from '../src/core/registry';
 import { ColorModality } from '../src/modalities';
 
@@ -265,10 +265,11 @@ describe('leak check: 50 simulated levels', () => {
     // The run really happened: 50 levels cleared, no fail.
     expect(controllerSamples).toHaveLength(LEVELS);
     expect(engine.createdControllerCount).toBeGreaterThan(1000);
-    const expectedSteps = Array.from({ length: LEVELS }, (_, i) => stepsForLevel(i + 1)).reduce(
-      (sum, n) => sum + n,
-      0,
-    );
+    // Colour costs 1.0, so a colour-only level spends its whole budget one step
+    // at a time — capped, because a cheap pool would otherwise run forever.
+    const expectedSteps = Array.from({ length: LEVELS }, (_, i) =>
+      Math.min(budgetForLevel(i + 1), MAX_STEPS),
+    ).reduce((sum, n) => sum + n, 0);
     expect(ProbeColorModality.presented.length).toBe(expectedSteps);
 
     // Flat, not growing: the count at level 50 equals the count at level 2.

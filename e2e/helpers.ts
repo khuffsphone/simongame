@@ -98,6 +98,20 @@ export async function startRun(page: Page, options: StartOptions = {}): Promise<
   await expect(page.locator('.app')).toHaveAttribute('data-screen', 'game');
 }
 
+/**
+ * Wait until capture opens, however many steps the level generated.
+ *
+ * Prefer this over `waitForCapture(page, n)` for anything that is not
+ * specifically asserting a step count: levels are generated against a
+ * cognitive budget, so an expensive modality produces fewer steps than a
+ * cheap one at the same level (CANON §4).
+ */
+export async function waitForAnyCapture(page: Page): Promise<string[]> {
+  await page.waitForFunction(() => window.__presented.length >= 1, undefined, { timeout: 30_000 });
+  await page.locator('[data-armed="true"]').first().waitFor({ state: 'attached', timeout: 30_000 });
+  return presented(page);
+}
+
 /** Wait until `total` steps have been presented and capture has opened. */
 export async function waitForCapture(page: Page, total: number): Promise<void> {
   await page.waitForFunction((n) => window.__presented.length >= n, total, { timeout: 30_000 });

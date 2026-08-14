@@ -72,7 +72,7 @@ test('interactive targets meet the 44px minimum (CANON §8)', async ({ page }) =
   expect(playBox.height).toBeGreaterThanOrEqual(44);
 
   await play.click();
-  for (const id of ['mode-classic', 'mode-mixed', 'difficulty-easy', 'menu-start']) {
+  for (const id of ['mode-classic', 'mode-marathon', 'difficulty-easy', 'menu-start']) {
     const box = (await page.getByTestId(id).boundingBox())!;
     expect(box.height, `${id} height`).toBeGreaterThanOrEqual(44);
     expect(box.width, `${id} width`).toBeGreaterThanOrEqual(44);

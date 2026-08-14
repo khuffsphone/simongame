@@ -143,22 +143,54 @@ gapMs(pace) = max(100, round(pace * 0.25))
 The gap exists so two consecutive identical values read as two beats rather
 than one long one. It is dead air, not presentation time.
 
-### Level schedule — data-driven
+### Curriculum — teach, then integrate
 
-| Level | Modality |
+> **Correction.** The previous schedule was one modality per level for levels
+> 1-5, then *every* modality at 10 steps from level 6. That is a wall, not an
+> escalation — and rhythm was never in the schedule at all, so it first appeared
+> interleaved and untaught. **CANON was wrong.** See `decisions/0017`.
+
+| Level | Pool | Kind |
+| --- | --- | --- |
+| 1 | `color` | teach |
+| 2 | `number` | teach |
+| 3 | `color`, `number` | integrate |
+| 4 | `shape` | teach |
+| 5 | `color`, `number`, `shape` | integrate |
+| 6 | `sound` | teach |
+| 7 | `color`, `number`, `shape`, `sound` | integrate |
+| 8 | `trace` | teach |
+| 9 | `rhythm` | teach |
+| 10 | all six | integrate |
+| 11+ | all six | continues |
+
+Invariant, and tested: **no modality appears in an integration level before it
+has had a teaching level.** The ladder is data
+(`src/content/curriculum.ts`). A pooled modality that is not registered is
+substituted from the registered pool, deterministically (`decisions/0004`).
+
+### Cognitive budget — length is not difficulty
+
+Thirteen colour taps and thirteen traced glyphs are not the same task. Levels
+are generated against a **cognitive budget** rather than a step count:
+
+| Modality | Cost |
 | --- | --- |
-| 1 | `color` |
-| 2 | `number` |
-| 3 | `shape` |
-| 4 | `sound` |
-| 5 | `trace` |
-| 6+ | interleaved: each step draws uniformly from all registered modalities |
+| colour, number | 1.00 |
+| shape | 1.10 |
+| sound | 1.25 |
+| rhythm | 2.00 |
+| trace | 2.50 |
 
-The schedule is data (`src/core/schedule.ts`), not branching. Resolution runs
-against the registry: a scheduled modality that is not registered is
-substituted from the registered pool, deterministically, via the run's RNG.
-See `decisions/0004`. This is what keeps levels 3–5 playable while shape,
-sound, and trace are still unbuilt.
+`budgetForLevel(n)` is deliberately the old step-count formula, so a colour
+level generates exactly the number of steps it always did and the familiar
+curve is preserved. Only levels containing expensive modalities get shorter —
+a level-8 trace round is **five drawings, not thirteen**.
+
+Bounds: at least 2 steps however expensive the pool, at most 40 however cheap.
+Difficulty scales the budget (easy 0.85, normal 1.0, hard 1.2) and never the
+perception floor: a harder level is longer, not dimmer or faster than the eye
+can follow.
 
 ### Game modes and difficulty — §4a
 

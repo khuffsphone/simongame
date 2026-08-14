@@ -205,7 +205,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
     const note = el(
       'p',
       'menu__note',
-      'Mixed Type runs every mode each phase: 3 steps each, then 4, then 5.',
+      'Classic teaches each mode, then integrates. Quick Mix is short. Marathon goes long.',
     );
 
     screen.append(
