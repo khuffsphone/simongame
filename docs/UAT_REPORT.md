@@ -1,9 +1,10 @@
-# UAT report — run `20260814T191828Z-b80e729`
+# UAT report — run `20260814T194611Z-affcb6d`
 
-Artifact: `MODESHIFT_PRODUCTION_RC_20260814T191828Z_b80e729.html`
-SHA-256: `39525efcd6a59bc02f3b4f5768de6bb6e3fb9fcead27bda05e3adcce9f39a297`
-Size: 54,621 bytes
-Commit: `b80e729`
+Artifact: `MODESHIFT_ANDROID_RC_20260814T194611Z_affcb6d.html`
+SHA-256: `5c986de67f825cc8356d8453c5c9628eba5774074a3159052ec12916aae0c67b`
+Size: 55,576 bytes
+Commit: `affcb6d`
+Target platform: **Android, Chrome** (`decisions/0021`)
 Ruleset version: 1 · Content-pack version: none · Persistence version: 2
 
 Supersedes the report for `20260814T182208Z-9146ace`. Two corrections to that
@@ -14,9 +15,9 @@ report are recorded at the bottom of this file.
 | Command | Result |
 | --- | --- |
 | `npm run typecheck` | exit 0 |
-| `npm test` | 180 passed, 13 files |
-| `npm run build` | 54,621 bytes; self-contained assertion OK |
-| `npx playwright test --workers=1` | 35 passed |
+| `npm test` | 219 passed, 14 files |
+| `npm run build` | 55,576 bytes; self-contained assertion OK |
+| `npx playwright test --workers=1` | 44 passed |
 | frame gate @ 4× | all phases PASS |
 | frame gate @ 8× | all phases PASS |
 | frame gate @ 16× | 3 phases FAIL — see below |
@@ -63,18 +64,20 @@ the right name and the wrong content. The rule and the measurement are now in
 
 | Category | Count |
 | --- | --- |
-| Unit + integration (Vitest) | 180 |
-| Browser e2e (Playwright) | 35 |
+| Unit + integration (Vitest) | 219 |
+| Browser e2e (Playwright) | 44 |
 | Frame-budget gate phases | 20 (5 phases × 4 throttles) |
 | Offline artifact replay | 1 (`e2e/artifact.spec.ts`) |
 | Leak / endurance | 1 (50 simulated levels) |
 | Content validation | 0 — no content pack exists yet |
 | Accessibility | partial — activation paths and 44 px targets only |
 
-New this run: 18 adaptive-assist unit tests, 8 engine integration tests for the
-assist, 18 reveal-wording unit tests, 5 e2e adaptive tests that seed the real
-save slot, 4 e2e reveal tests that lose real runs and read the overlay, and 3
-progression tests pinning the new pace floor.
+New: 18 adaptive-assist unit tests, 8 engine integration tests for the assist,
+18 reveal-wording unit tests, **39 haptics unit tests**, 5 e2e adaptive tests
+that seed the real save slot, 4 e2e reveal tests that lose real runs and read
+the overlay, **9 e2e haptics tests that probe the shipped bundle for exact
+vibration patterns at exact moments**, and 3 progression tests pinning the new
+pace floor.
 
 ## What changed since `9146ace`
 
@@ -83,6 +86,8 @@ progression tests pinning the new pace floor.
 | `801c57c` | Pace floor 250 → 400 ms; length is the only unbounded difficulty knob (`decisions/0018`) |
 | `e61519d` | `modalityAccuracy` is read: per-modality adaptive assist, disclosed by name (`decisions/0019`) |
 | `b80e729` | A run may not end without revealing its answer (`decisions/0020`) |
+| `fd4f6fb` | Frame gate: the jackpot phase was 85% idle frames (below) |
+| `affcb6d` | Android declared the target; haptics implemented against real hardware constraints (`decisions/0021`) |
 
 ## Correction to the previous report's command table
 
@@ -99,8 +104,30 @@ product defects listed in the previous run are fixed; the gaps those fixes
 introduced are listed rather than left implicit. Unbuilt packets are scope, not
 defects.
 
+## Haptics — what is and is not proven
+
+Headless Chromium does not implement `navigator.vibrate`, so **no phone has
+buzzed**. `e2e/haptics.spec.ts` installs a probe on the shipped bundle and
+asserts the rest:
+
+| Assertion | Result |
+| --- | --- |
+| Nothing dispatched before first interaction | pass |
+| Entry gesture → `[20]` | pass |
+| Mode select → `[20]`, start → `[30, 40, 60]` | pass |
+| Correct step → `[25]`, a single pulse | pass |
+| Personal best → `[40,30,60,30,90,40,140]`, distinct from an ordinary clear | pass |
+| Ordinary clear → `[40,30,60,30,90]` | pass |
+| Fail → `[90, 50, 140]` | pass |
+| Leaving a run cancels with `[]` | pass |
+| No pulse below 20 ms anywhere in a full playthrough | pass |
+
+The 20 ms floor and the 25 ms step pulse are **reasoned from ERM motor spin-up
+behaviour, not measured on hardware**. A device pass should tune them;
+`src/ui/haptics.ts` holds the single pattern table.
+
 ## Still UNVERIFIED
 
-Unchanged from the previous run: no physical device, nothing listens to the
-audio, `navigator.vibrate` is unimplemented in headless Chromium and in iOS
-Safari, iOS Safari untested entirely, no real touch hardware, portrait only.
+No physical device; nothing listens to the audio; no real touch hardware;
+portrait only. iOS Safari is no longer listed — it is out of scope, not
+untested risk (`decisions/0021`).
