@@ -28,6 +28,8 @@ export class ScriptedModality implements Modality<number> {
 
   /** Every value ever presented, in order, across levels and replays. */
   readonly presented: number[] = [];
+  /** The duration the engine asked for on each of those presentations. */
+  readonly durations: number[] = [];
   mounted = false;
   active = false;
 
@@ -58,6 +60,7 @@ export class ScriptedModality implements Modality<number> {
 
   async presentStep(value: number, durationMs: number, signal: AbortSignal): Promise<void> {
     this.presented.push(value);
+    this.durations.push(durationMs);
     await wait(this.#services!.clock, durationMs, signal);
   }
 

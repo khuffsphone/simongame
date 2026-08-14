@@ -1,4 +1,5 @@
 import { ControllerRegistry, linkAbort } from './abort';
+import { INERT_ADAPTIVE, type AdaptiveProfile } from './adaptive';
 import type { AudioService } from './audio';
 import { isAbortError, rafClock, wait, type Clock } from './clock';
 import { Emitter } from './emitter';
@@ -47,6 +48,8 @@ export type EngineEvents = {
     scheduled: string | null;
     substituted: boolean;
     mode: GameMode;
+    /** Modalities in this level being given extra time. Never hidden (§4b). */
+    assisted: readonly string[];
   };
   present: { index: number; total: number; modalityId: string };
   capture: { index: number; total: number; modalityId: string };
@@ -84,6 +87,11 @@ export interface EngineOptions {
   levelUpHoldMs?: number;
   mode?: GameMode;
   difficulty?: Difficulty;
+  /**
+   * Per-modality time assist (CANON §4b). Omit or pass null for a fixed
+   * ruleset — the engine's own default adapts nothing.
+   */
+  adaptive?: AdaptiveProfile | null;
 }
 
 /** CANON §7: one focus-lost replay per run, one pointercancel retry per level. */
@@ -111,6 +119,7 @@ export class Engine {
   readonly #difficulty: Difficulty;
   readonly #services: ModalityServices;
   readonly #levelUpHoldMs: number;
+  readonly #adaptive: AdaptiveProfile;
 
   readonly #controllers = new ControllerRegistry();
   readonly #instances = new Map<string, Modality>();
@@ -152,6 +161,7 @@ export class Engine {
     this.#mode = options.mode ?? 'classic';
     this.#difficulty = options.difficulty ?? 'normal';
     this.#levelUpHoldMs = options.levelUpHoldMs ?? DEFAULT_LEVEL_UP_HOLD_MS;
+    this.#adaptive = options.adaptive ?? INERT_ADAPTIVE;
     this.#services = {
       audio: options.audio,
       clock: this.#clock,
@@ -375,7 +385,13 @@ export class Engine {
         this.#activate(step.modalityId);
         this.events.emit('present', { index, total, modalityId: step.modalityId });
 
-        const durationMs = Math.max(pace, ModalityCtor.minPresentMs);
+        // The assist scales the duration *after* the perception floor is
+        // applied, and can only ever raise it back above that floor — a
+        // modality the player has solved is shown for less time, never for
+        // less time than it takes to see (CANON §4b).
+        const base = Math.max(pace, ModalityCtor.minPresentMs);
+        const scaled = Math.round(base * this.#adaptive.presentScaleFor(step.modalityId));
+        const durationMs = Math.max(ModalityCtor.minPresentMs, scaled);
         await instance.presentStep(step.value, durationMs, phase.signal);
         await wait(this.#clock, gap, phase.signal);
       }
@@ -415,7 +431,11 @@ export class Engine {
             instance,
             stepController.signal,
             this.#clock,
-            Math.round(ModalityCtor.captureTimeoutMs * TIMEOUT_MULTIPLIER[this.#difficulty]),
+            Math.round(
+              ModalityCtor.captureTimeoutMs *
+                TIMEOUT_MULTIPLIER[this.#difficulty] *
+                this.#adaptive.timeoutScaleFor(step.modalityId),
+            ),
           );
         } finally {
           unlink();
@@ -548,14 +568,16 @@ export class Engine {
   }
 
   #emitLevel(): void {
+    const plan = this.#plan?.steps ?? [];
     this.events.emit('level', {
       level: this.#level,
       steps: this.#sequence.length,
       seed: this.#seed,
-      plan: this.#plan?.steps ?? [],
+      plan,
       scheduled: this.#plan?.scheduled ?? null,
       substituted: this.#plan?.substituted ?? false,
       mode: this.#mode,
+      assisted: [...new Set(plan)].filter((id) => this.#adaptive.assisted.includes(id)),
     });
   }
 }

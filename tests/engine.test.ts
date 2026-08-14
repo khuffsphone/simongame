@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAdaptiveProfile } from '../src/core/adaptive';
 import { createSilentAudioService } from '../src/core/audio';
 import { Engine } from '../src/core/engine';
 import { ModalityRegistry } from '../src/core/registry';
@@ -261,5 +262,115 @@ describe('quotas surfaced to the UI (CANON §7)', () => {
     expect(harness.engine.level).toBe(2);
     expect(harness.engine.retriesRemaining).toBe(1);
     expect(harness.events.quotas.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('adaptive assist (CANON §4b)', () => {
+  const struggling = createAdaptiveProfile({
+    scripted: { attempts: 40, passes: 0, accuracyTotal: 0 },
+  });
+  const solved = createAdaptiveProfile({
+    scripted: { attempts: 40, passes: 40, accuracyTotal: 40 },
+  });
+
+  it('is off by default: no profile presents exactly the canonical pace', async () => {
+    harness = createHarness();
+    autoPlay(harness.engine, harness.modality);
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(LEVEL_1_PRESENTATION_MS + 400);
+
+    expect(harness.modality.durations.slice(0, 3)).toEqual([800, 800, 800]);
+  });
+
+  it('shows a struggling modality for longer', async () => {
+    harness = createHarness({ adaptive: struggling });
+    autoPlay(harness.engine, harness.modality);
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(LEVEL_1_PRESENTATION_MS * 2);
+
+    // MAX_ASSIST at a 0% pass rate: 800 * 1.35.
+    expect(harness.modality.durations.slice(0, 3)).toEqual([1080, 1080, 1080]);
+  });
+
+  it('shows a solved modality for less, and never below its perception floor', async () => {
+    harness = createHarness({ adaptive: solved });
+    autoPlay(harness.engine, harness.modality);
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(LEVEL_1_PRESENTATION_MS + 400);
+
+    expect(harness.modality.durations.slice(0, 3)).toEqual([720, 720, 720]);
+    for (const duration of harness.modality.durations) {
+      expect(duration).toBeGreaterThanOrEqual(ScriptedModality.minPresentMs);
+    }
+  });
+
+  it('does not change how many steps the level has', async () => {
+    // The whole point: assist moves time, never the task. Same seed, same
+    // level, same sequence — only the clock differs.
+    const plain = createHarness();
+    autoPlay(plain.engine, plain.modality);
+    plain.engine.start();
+    await vi.advanceTimersByTimeAsync(LEVEL_1_PRESENTATION_MS + 400);
+    const plainSequence = plain.modality.presented.slice(0, 3);
+    const plainSteps = plain.events.levels[0]!.steps;
+    plain.dispose();
+
+    harness = createHarness({ adaptive: struggling });
+    autoPlay(harness.engine, harness.modality);
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(LEVEL_1_PRESENTATION_MS * 2);
+
+    expect(harness.modality.presented.slice(0, 3)).toEqual(plainSequence);
+    expect(harness.events.levels[0]!.steps).toBe(plainSteps);
+  });
+
+  it('extends the answer clock for a struggling modality', async () => {
+    harness = createHarness({ adaptive: struggling });
+    // Never answer: the only thing that can end this level is the timeout.
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(3 * (1080 + 200) + 20);
+    expect(harness.engine.state).toBe('CAPTURING');
+
+    // The unassisted deadline is 1000 ms. Past it, still alive.
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(harness.events.fails).toEqual([]);
+
+    // The assisted deadline is 1350 ms.
+    await vi.advanceTimersByTimeAsync(400);
+    expect(harness.events.fails[0]?.reason).toBe('timeout');
+  });
+
+  it('never shortens the answer clock for a solved modality', async () => {
+    harness = createHarness({ adaptive: solved });
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(3 * (720 + 200) + 20);
+    expect(harness.engine.state).toBe('CAPTURING');
+
+    // Presentation tightened to 0.9x, but the answer clock is still the full
+    // 1000 ms — competence is not punished with a shorter fuse.
+    await vi.advanceTimersByTimeAsync(940);
+    expect(harness.events.fails).toEqual([]);
+    await vi.advanceTimersByTimeAsync(120);
+    expect(harness.events.fails[0]?.reason).toBe('timeout');
+  });
+
+  it('discloses the assist on every level event', async () => {
+    harness = createHarness({ adaptive: struggling });
+    autoPlay(harness.engine, harness.modality);
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(harness.events.levels[0]?.assisted).toEqual(['scripted']);
+  });
+
+  it('discloses nothing when the assist is off', async () => {
+    harness = createHarness({ adaptive: solved });
+    autoPlay(harness.engine, harness.modality);
+    harness.engine.start();
+    await vi.advanceTimersByTimeAsync(100);
+
+    // Tightened, not assisted: `assisted` is the list of modalities being
+    // *helped*, and claiming help that is not being given would be a lie.
+    expect(harness.events.levels[0]?.assisted).toEqual([]);
   });
 });

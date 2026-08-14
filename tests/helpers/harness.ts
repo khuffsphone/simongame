@@ -1,3 +1,4 @@
+import type { AdaptiveProfile } from '../../src/core/adaptive';
 import { createSilentAudioService } from '../../src/core/audio';
 import { Engine, type EngineEvents, type VisibilityHost } from '../../src/core/engine';
 import { ModalityRegistry } from '../../src/core/registry';
@@ -42,10 +43,15 @@ export interface RecordedEvents {
   scores: EngineEvents['score'][];
   levelUps: EngineEvents['levelUp'][];
   quotas: EngineEvents['quota'][];
+  levels: EngineEvents['level'][];
 }
 
 export function createHarness(
-  options: { pinnedSeed?: number; levelUpHoldMs?: number } = {},
+  options: {
+    pinnedSeed?: number;
+    levelUpHoldMs?: number;
+    adaptive?: AdaptiveProfile | null;
+  } = {},
 ): Harness {
   ScriptedModality.reset();
 
@@ -62,10 +68,19 @@ export function createHarness(
     visibility,
     pinnedSeed: options.pinnedSeed ?? 20260814,
     levelUpHoldMs: options.levelUpHoldMs ?? 100,
+    adaptive: options.adaptive ?? null,
   });
 
-  const events: RecordedEvents = { states: [], fails: [], scores: [], levelUps: [], quotas: [] };
+  const events: RecordedEvents = {
+    states: [],
+    fails: [],
+    scores: [],
+    levelUps: [],
+    quotas: [],
+    levels: [],
+  };
   engine.events.on('state', ({ state }) => events.states.push(state));
+  engine.events.on('level', (payload) => events.levels.push(payload));
   engine.events.on('fail', (payload) => events.fails.push(payload));
   engine.events.on('score', (payload) => events.scores.push(payload));
   engine.events.on('levelUp', (payload) => events.levelUps.push(payload));

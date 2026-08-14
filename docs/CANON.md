@@ -233,6 +233,44 @@ Difficulty scales two things and nothing else:
 Easy presents *slower* and allows *longer* to answer. Difficulty never changes
 step counts, the schedule, or scoring thresholds.
 
+### Adaptive assist — §4b
+
+Per-modality accuracy has been persisted since the first build. It is now read.
+
+A modality's pass rate scales **time and nothing else**:
+
+| what | scaled |
+| --- | --- |
+| presentation duration | yes, 0.90× – 1.35× |
+| capture timeout | yes, 1.00× – 1.35× (never shortened) |
+| step count, cognitive budget, ladder, RNG draws, scoring thresholds | **never** |
+
+```
+scale(rate) = rate < 0.60 ? 1 + (0.60 - rate)/0.60 * 0.35
+            : rate > 0.90 ? 1 - (rate - 0.90)/0.10 * 0.10
+            : 1
+```
+
+Normative constraints:
+
+1. **A modality needs 8 attempts before its record moves anything.** Two bad
+   levels are not a diagnosis.
+2. **The record forgets.** Effective sample size is capped at 40 attempts via an
+   exponential moving average, so an assist can be earned out of. Lifetime totals
+   are a trap the player cannot escape.
+3. **The assist is disclosed every level**, by name, in the seed footer, and as
+   `assisted` on the `level` event. A difficulty change the player cannot see is
+   a difficulty change they cannot trust.
+4. **Pressure never shortens the answer clock.** Taking time away from a player
+   who is answering correctly is a punishment for competence.
+5. **The perception floor still binds.** A tightened presentation is clamped at
+   the modality's `minPresentMs`.
+6. **Fixed rulesets refuse adaptivity outright** — `adaptivityAllowed(mode)`,
+   not a default that can be forgotten. `daily` is already in that set although
+   the Daily Challenge does not exist yet, so it cannot ship without the gate.
+
+See `decisions/0019`.
+
 ### Discrete cardinality
 
 Colour, number, shape, and sound each expose **4 options**. Cardinality is

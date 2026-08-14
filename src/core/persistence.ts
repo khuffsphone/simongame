@@ -5,10 +5,23 @@ const KEY = 'modeshift:v2';
 const VERSION = 2;
 
 export interface ModalityRecord {
+  /** May be fractional: the record forgets, see `ACCURACY_WINDOW`. */
   attempts: number;
   passes: number;
   accuracyTotal: number;
 }
+
+/**
+ * Effective sample size of a modality's accuracy record.
+ *
+ * Lifetime totals cannot be escaped. A player who was bad at trace five hundred
+ * attempts ago would carry the assist forever, and — worse — could never earn
+ * their way out of it, because a hundred recent passes barely move a lifetime
+ * mean. So the record forgets: once it holds this many attempts, each new one
+ * scales the old totals down before adding itself, which is an exponential
+ * moving average that needs no extra schema and no array of timestamps.
+ */
+export const ACCURACY_WINDOW = 40;
 
 export interface SaveData {
   bestLevel: number;
@@ -109,6 +122,12 @@ export class Persistence {
       passes: 0,
       accuracyTotal: 0,
     };
+    if (record.attempts >= ACCURACY_WINDOW) {
+      const decay = ACCURACY_WINDOW / (ACCURACY_WINDOW + 1);
+      record.attempts *= decay;
+      record.passes *= decay;
+      record.accuracyTotal *= decay;
+    }
     record.attempts += 1;
     record.passes += pass ? 1 : 0;
     record.accuracyTotal += accuracy;

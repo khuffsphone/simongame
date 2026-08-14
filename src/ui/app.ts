@@ -1,3 +1,4 @@
+import { adaptivityAllowed, createAdaptiveProfile } from '../core/adaptive';
 import type { AudioService } from '../core/audio';
 import { Engine } from '../core/engine';
 import { BUILT_IN_MODES, DIFFICULTIES, type Difficulty, type GameMode } from '../core/modes';
@@ -18,6 +19,8 @@ export interface AppOptions {
   persistence?: Persistence;
   pinnedSeed?: number | null;
   reducedMotion?: boolean;
+  /** Master switch for the per-modality time assist (CANON §4b). */
+  adaptive?: boolean;
 }
 
 const HAPTIC_STEP = 18;
@@ -302,6 +305,12 @@ export function createApp(options: AppOptions): { destroy: () => void } {
     const replayValue = value(replayCell);
     const retryValue = value(retryCell);
 
+    // Built once per run, from the record as it stood at the start. Rebuilding
+    // it mid-run would change the rules of a level while it was being played.
+    const adaptive = createAdaptiveProfile(persistence.snapshot().modalityAccuracy, {
+      enabled: (options.adaptive ?? true) && adaptivityAllowed(String(mode)),
+    });
+
     const nextEngine = new Engine({
       registry,
       stage,
@@ -311,6 +320,7 @@ export function createApp(options: AppOptions): { destroy: () => void } {
       reducedMotion,
       mode,
       difficulty,
+      adaptive,
     });
     engine = nextEngine;
 
@@ -330,16 +340,26 @@ export function createApp(options: AppOptions): { destroy: () => void } {
       if (state === 'LEVEL_SETUP' && overlay.dataset['open'] === 'true') closeOverlay();
     });
 
-    nextEngine.events.on('level', ({ level, steps, seed, plan, substituted, scheduled }) => {
-      levelValue.textContent = String(level);
-      stepValue.textContent = `0 / ${steps}`;
-      const unique = [...new Set(plan)];
-      modeValue.textContent =
-        unique.length === 1 ? labelFor(unique[0]!) : `Mixed · ${unique.length}`;
-      modeValue.dataset['substituted'] = String(substituted);
-      if (substituted && scheduled) modeValue.title = `${scheduled} unavailable`;
-      seedLine.textContent = `seed ${seed} · ${String(mode)} · ${difficulty}`;
-    });
+    nextEngine.events.on(
+      'level',
+      ({ level, steps, seed, plan, substituted, scheduled, assisted }) => {
+        levelValue.textContent = String(level);
+        stepValue.textContent = `0 / ${steps}`;
+        const unique = [...new Set(plan)];
+        modeValue.textContent =
+          unique.length === 1 ? labelFor(unique[0]!) : `Mixed · ${unique.length}`;
+        modeValue.dataset['substituted'] = String(substituted);
+        if (substituted && scheduled) modeValue.title = `${scheduled} unavailable`;
+
+        // The assist is disclosed, every level, in the same line as the seed.
+        // A difficulty change the player cannot see is a difficulty change they
+        // cannot trust.
+        root.dataset['adaptive'] = String(assisted.length > 0);
+        const assist =
+          assisted.length > 0 ? ` · assist: ${assisted.map(labelFor).join(', ')}` : '';
+        seedLine.textContent = `seed ${seed} · ${String(mode)} · ${difficulty}${assist}`;
+      },
+    );
 
     nextEngine.events.on('present', ({ index, total, modalityId }) => {
       stepValue.textContent = `${index + 1} / ${total}`;
