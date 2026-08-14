@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "npm run build && playwright test",
-    "verify": "npm run build && npm run test && playwright test"
+    "verify": "npm run build && npm run test && playwright test",
+    "gate:frames": "node .claude/skills/gauntlet-loop/scripts/measure-frames.mjs --url http://127.0.0.1:4173 --phases ./.claude/skills/gauntlet-loop/scripts/example-phases.mjs --throttle 4 --budget 20"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
