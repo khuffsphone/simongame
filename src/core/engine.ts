@@ -2,10 +2,17 @@ import { ControllerRegistry, linkAbort } from './abort';
 import type { AudioService } from './audio';
 import { isAbortError, rafClock, wait, type Clock } from './clock';
 import { Emitter } from './emitter';
-import { gapMsForPace, paceForLevel, stepsForLevel } from './progression';
+import {
+  PRESENT_MULTIPLIER,
+  TIMEOUT_MULTIPLIER,
+  buildModePlan,
+  type Difficulty,
+  type GameMode,
+} from './modes';
+import { gapMsForPace, paceForLevel } from './progression';
 import { createRng, randomSeed, type Rng } from './rng';
 import type { ModalityRegistry } from './registry';
-import { resolveLevelPlan, type ResolvedPlan } from './schedule';
+import type { ModePlan } from './modes';
 import type { CaptureResult, Modality, ModalityServices } from './types';
 
 // Engine FSM — CANON §2. The engine owns every state transition, the sequence
@@ -39,10 +46,18 @@ export type EngineEvents = {
     plan: readonly string[];
     scheduled: string | null;
     substituted: boolean;
+    mode: GameMode;
   };
   present: { index: number; total: number; modalityId: string };
   capture: { index: number; total: number; modalityId: string };
-  score: { index: number; total: number; modalityId: string; pass: boolean; accuracy: number };
+  score: {
+    index: number;
+    total: number;
+    modalityId: string;
+    pass: boolean;
+    accuracy: number;
+    combo: number;
+  };
   quota: { replays: number; retries: number };
   levelUp: { level: number; next: number };
   fail: { reason: FailReason; level: number; seed: number };
@@ -67,6 +82,8 @@ export interface EngineOptions {
   reducedMotion?: boolean;
   /** Celebration beat between clearing a level and setting up the next. */
   levelUpHoldMs?: number;
+  mode?: GameMode;
+  difficulty?: Difficulty;
 }
 
 /** CANON §7: one focus-lost replay per run, one pointercancel retry per level. */
@@ -90,6 +107,8 @@ export class Engine {
   readonly #clock: Clock;
   readonly #visibility: VisibilityHost | null;
   readonly #pinnedSeed: number | null;
+  readonly #mode: GameMode;
+  readonly #difficulty: Difficulty;
   readonly #services: ModalityServices;
   readonly #levelUpHoldMs: number;
 
@@ -107,7 +126,9 @@ export class Engine {
   #seed = 0;
   #rng: Rng = createRng(0);
   #sequence: SequenceStep[] = [];
-  #plan: ResolvedPlan | null = null;
+  #plan: ModePlan | null = null;
+  #combo = 0;
+  #bestCombo = 0;
   #activeId: string | null = null;
 
   #replaysRemaining = REPLAYS_PER_RUN;
@@ -128,6 +149,8 @@ export class Engine {
     this.#clock = options.clock ?? rafClock;
     this.#visibility = options.visibility ?? null;
     this.#pinnedSeed = options.pinnedSeed ?? null;
+    this.#mode = options.mode ?? 'classic';
+    this.#difficulty = options.difficulty ?? 'normal';
     this.#levelUpHoldMs = options.levelUpHoldMs ?? DEFAULT_LEVEL_UP_HOLD_MS;
     this.#services = {
       audio: options.audio,
@@ -206,6 +229,8 @@ export class Engine {
     this.#retriesRemaining = RETRIES_PER_LEVEL;
     this.#replaySequence = false;
     this.#interrupt = null;
+    this.#combo = 0;
+    this.#bestCombo = 0;
 
     this.#loop = this.#runLoop();
   }
@@ -231,6 +256,18 @@ export class Engine {
   }
   get retriesRemaining(): number {
     return this.#retriesRemaining;
+  }
+  get mode(): GameMode {
+    return this.#mode;
+  }
+  get difficulty(): Difficulty {
+    return this.#difficulty;
+  }
+  get combo(): number {
+    return this.#combo;
+  }
+  get bestCombo(): number {
+    return this.#bestCombo;
   }
   /** Controllers created but not released. Must return to 0 — CANON §10. */
   get liveControllerCount(): number {
@@ -306,8 +343,7 @@ export class Engine {
   }
 
   #buildSequence(): SequenceStep[] {
-    const steps = stepsForLevel(this.#level);
-    const plan = resolveLevelPlan(this.#level, steps, this.#rng, this.#registry.ids());
+    const plan = buildModePlan(this.#mode, this.#level, this.#rng, this.#registry.ids());
     this.#plan = plan;
     return plan.steps.map((modalityId) => ({
       modalityId,
@@ -320,7 +356,7 @@ export class Engine {
     const phase = this.#controllers.create();
     this.#phaseController = phase;
 
-    const pace = paceForLevel(this.#level);
+    const pace = Math.round(paceForLevel(this.#level) * PRESENT_MULTIPLIER[this.#difficulty]);
     const gap = gapMsForPace(pace);
     const total = this.#sequence.length;
 
@@ -373,7 +409,7 @@ export class Engine {
             instance,
             stepController.signal,
             this.#clock,
-            ModalityCtor.captureTimeoutMs,
+            Math.round(ModalityCtor.captureTimeoutMs * TIMEOUT_MULTIPLIER[this.#difficulty]),
           );
         } finally {
           unlink();
@@ -389,12 +425,19 @@ export class Engine {
 
         this.#setState('SCORING');
         const score = instance.scoreStep(outcome.result, step.value);
+        if (score.pass) {
+          this.#combo += 1;
+          if (this.#combo > this.#bestCombo) this.#bestCombo = this.#combo;
+        } else {
+          this.#combo = 0;
+        }
         this.events.emit('score', {
           index,
           total,
           modalityId: step.modalityId,
           pass: score.pass,
           accuracy: score.accuracy,
+          combo: this.#combo,
         });
 
         // 0 lives: the first wrong step ends the run immediately (CANON §6).
@@ -506,6 +549,7 @@ export class Engine {
       plan: this.#plan?.steps ?? [],
       scheduled: this.#plan?.scheduled ?? null,
       substituted: this.#plan?.substituted ?? false,
+      mode: this.#mode,
     });
   }
 }

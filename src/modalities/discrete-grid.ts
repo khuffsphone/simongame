@@ -43,6 +43,15 @@ export abstract class DiscreteGridModality implements Modality<number> {
   /** Class name applied to the grid, so each modality can style its own pads. */
   protected abstract get gridClass(): string;
 
+  /**
+   * Whether presentation lights the specific pad. The sound modality sets this
+   * false: if the pad lit up, identifying the tone would be unnecessary and the
+   * modality would collapse into a colour game.
+   */
+  protected get revealsPadDuringPresentation(): boolean {
+    return true;
+  }
+
   mount(container: HTMLElement, services: ModalityServices): void {
     this.services = services;
     this.#options = this.buildOptions();
@@ -100,8 +109,14 @@ export abstract class DiscreteGridModality implements Modality<number> {
       throw new Error(`Cannot present unknown option ${value}`);
     }
 
+    // Every modality marks presentation on its root, which is the one hook the
+    // e2e suite observes across all six (decisions/0007).
     root.dataset['stepValue'] = String(value);
-    button.dataset['presenting'] = 'true';
+    if (this.revealsPadDuringPresentation) {
+      button.dataset['presenting'] = 'true';
+    } else {
+      root.dataset['listening'] = 'true';
+    }
     this.services.audio.tone({
       freq: option.toneHz,
       durationMs: Math.min(durationMs, MAX_TONE_MS),
@@ -112,6 +127,7 @@ export abstract class DiscreteGridModality implements Modality<number> {
       await wait(this.services.clock, durationMs, signal);
     } finally {
       button.dataset['presenting'] = 'false';
+      delete root.dataset['listening'];
       delete root.dataset['stepValue'];
     }
   }

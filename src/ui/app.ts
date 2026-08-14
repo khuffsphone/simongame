@@ -1,231 +1,442 @@
 import type { AudioService } from '../core/audio';
-import type { Engine, EngineState } from '../core/engine';
+import { Engine } from '../core/engine';
+import { BUILT_IN_MODES, DIFFICULTIES, type Difficulty, type GameMode } from '../core/modes';
+import { Persistence } from '../core/persistence';
 import type { ModalityRegistry } from '../core/registry';
+import { Fx } from '../fx/fx';
+import { justAppearedGuard, onActivate, onPrime } from './activate';
 import './app.css';
 
-/**
- * The app shell: HUD, stage, and the overlay that owns the start gesture.
- *
- * The overlay's start button is the only place audio is unlocked — the engine
- * refuses to run until the context reports 'running' (CANON §9).
- */
+// Screen router: SPLASH -> MENU -> GAME. The engine owns gameplay; this owns
+// presentation, FX, haptics, and the audio-unlock gesture.
 
 export interface AppOptions {
   root: HTMLElement;
-  /** Created by the caller, because the engine needs it before the app exists. */
-  stage: HTMLElement;
-  engine: Engine;
   audio: AudioService;
   registry: ModalityRegistry;
+  fx: Fx;
+  persistence?: Persistence;
+  pinnedSeed?: number | null;
+  reducedMotion?: boolean;
 }
 
-const OVERLAY_COPY: Record<string, { title: string; body: string; action: string | null }> = {
-  start: {
-    title: 'MODESHIFT',
-    body: 'Watch the sequence, then repeat it. The mode changes as you climb.',
-    action: 'Tap to start',
-  },
-  paused: {
-    title: 'Paused',
-    body: 'You left mid-run. Come back and the level replays from the top — once.',
-    action: null,
-  },
-  fail: {
-    title: 'Run over',
-    body: '',
-    action: 'Play again',
-  },
-  blocked: {
-    title: 'Audio unavailable',
-    body: 'MODESHIFT needs the Web Audio API. The run cannot start without it.',
-    action: 'Try again',
-  },
-};
+const HAPTIC_STEP = 18;
+const HAPTIC_LEVEL = [40, 30, 60, 30, 90];
+const HAPTIC_FAIL = [90, 50, 140];
 
-export function createApp({ root, stage, engine, audio, registry }: AppOptions): void {
-  root.innerHTML = '';
+function vibrate(pattern: number | number[], reducedMotion: boolean): void {
+  if (reducedMotion) return;
+  navigator.vibrate?.(pattern);
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+export function createApp(options: AppOptions): { destroy: () => void } {
+  const { root, audio, registry, fx } = options;
+  const persistence = options.persistence ?? new Persistence();
+  const reducedMotion = options.reducedMotion ?? false;
+
+  let engine: Engine | null = null;
+  let mode: GameMode = 'classic';
+  let difficulty: Difficulty = 'normal';
+
   root.className = 'app';
-  root.dataset['state'] = 'BOOT';
+  root.dataset['screen'] = 'splash';
 
-  // --- HUD ---------------------------------------------------------------
-  const hud = document.createElement('header');
-  hud.className = 'hud';
-
-  const cell = (label: string, testId: string, initial: string): HTMLElement => {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'hud__cell';
-    const caption = document.createElement('span');
-    caption.className = 'hud__label';
-    caption.textContent = label;
-    const value = document.createElement('b');
-    value.className = 'hud__value';
-    value.dataset['testid'] = testId;
-    value.textContent = initial;
-    wrapper.append(caption, value);
-    return wrapper;
+  const teardownGame = (): void => {
+    engine?.destroy();
+    engine = null;
+    fx.clear();
   };
 
-  const levelCell = cell('Level', 'hud-level', '1');
-  const modeCell = cell('Mode', 'hud-mode', '—');
-  const stepCell = cell('Step', 'hud-step', '0 / 0');
-  const replayCell = cell('Replays', 'hud-replays', '1');
-  const retryCell = cell('Retries', 'hud-retries', '1');
-  hud.append(levelCell, modeCell, stepCell, replayCell, retryCell);
+  // --- splash -------------------------------------------------------------
 
-  const read = (host: HTMLElement): HTMLElement => host.querySelector('.hud__value')!;
-  const levelValue = read(levelCell);
-  const modeValue = read(modeCell);
-  const stepValue = read(stepCell);
-  const replayValue = read(replayCell);
-  const retryValue = read(retryCell);
+  function renderSplash(): void {
+    teardownGame();
+    root.dataset['screen'] = 'splash';
+    root.dataset['state'] = 'BOOT';
+    root.replaceChildren();
 
-  // --- overlay -----------------------------------------------------------
-  const overlay = document.createElement('div');
-  overlay.className = 'overlay';
-  overlay.dataset['testid'] = 'overlay';
-  overlay.dataset['open'] = 'true';
+    const screen = el('main', 'screen screen--splash');
+    screen.setAttribute('aria-label', 'MODESHIFT splash');
 
-  const panel = document.createElement('div');
-  panel.className = 'overlay__panel';
+    const marquee = el('div', 'marquee');
+    marquee.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 12; i += 1) marquee.append(el('i', 'marquee__bulb'));
 
-  const title = document.createElement('h1');
-  title.className = 'overlay__title';
-  title.dataset['testid'] = 'overlay-title';
+    const title = el('h1', 'logo');
+    title.dataset['testid'] = 'splash-title';
+    'MODESHIFT'.split('').forEach((ch, i) => {
+      const span = el('span', 'logo__ch', ch);
+      span.style.setProperty('--i', String(i));
+      title.append(span);
+    });
 
-  const body = document.createElement('p');
-  body.className = 'overlay__body';
-  body.dataset['testid'] = 'overlay-body';
+    const tagline = el('p', 'tagline', 'Colour · Number · Shape · Sound · Trace · Rhythm');
+    const best = el(
+      'p',
+      'splash__best',
+      persistence.bestLevel > 0 ? `Best level ${persistence.bestLevel}` : 'No runs yet',
+    );
 
-  const action = document.createElement('button');
-  action.type = 'button';
-  action.className = 'overlay__action';
-  action.dataset['testid'] = 'overlay-action';
+    const play = el('button', 'btn btn--hero', 'PLAY');
+    play.type = 'button';
+    play.dataset['testid'] = 'splash-play';
 
-  panel.append(title, body, action);
-  overlay.append(panel);
+    screen.append(marquee, title, tagline, best, play);
+    root.append(screen);
 
-  const seedLine = document.createElement('footer');
-  seedLine.className = 'seed';
-  seedLine.dataset['testid'] = 'seed';
+    let entering = false;
+    onPrime(play, () => void audio.unlock());
+    onActivate(play, () => {
+      if (entering) return;
+      entering = true;
+      // The AudioContext is constructed here, inside the gesture, never before.
+      void audio.unlock().then((state) => {
+        if (state === 'running') audio.cue('splash');
+        fx.mount();
+        fx.burst(window.innerWidth / 2, window.innerHeight * 0.62, 26);
+        vibrate(30, reducedMotion);
+        renderMenu();
+      });
+    });
+  }
 
-  root.append(hud, stage, overlay, seedLine);
+  // --- menu ---------------------------------------------------------------
 
-  // --- overlay control ---------------------------------------------------
-  let mode: keyof typeof OVERLAY_COPY = 'start';
+  function renderMenu(): void {
+    teardownGame();
+    root.dataset['screen'] = 'menu';
+    root.dataset['state'] = 'BOOT';
+    root.replaceChildren();
 
-  const renderOverlay = (next: keyof typeof OVERLAY_COPY, bodyOverride?: string): void => {
-    mode = next;
-    const copy = OVERLAY_COPY[next]!;
-    title.textContent = copy.title;
-    body.textContent = bodyOverride ?? copy.body;
-    body.hidden = (bodyOverride ?? copy.body) === '';
-    if (copy.action === null) {
-      action.hidden = true;
-      action.textContent = '';
-    } else {
-      action.hidden = false;
-      action.textContent = copy.action;
+    const screen = el('main', 'screen screen--menu');
+    screen.setAttribute('aria-label', 'MODESHIFT menu');
+
+    const header = el('header', 'menu__header');
+    header.append(el('p', 'eyebrow', 'SELECT GAME'), el('h1', 'menu__title', 'MODESHIFT'));
+
+    // Mode cards: the two built-ins, then one per registered modality.
+    const modeList = el('div', 'cards');
+    modeList.setAttribute('role', 'radiogroup');
+    modeList.setAttribute('aria-label', 'Game type');
+
+    const entries: { id: GameMode; label: string; blurb: string }[] = [
+      ...BUILT_IN_MODES.map((m) => ({ id: m.id, label: m.label, blurb: m.blurb })),
+      ...registry.all().map((m) => ({ id: m.id, label: `${m.label} only`, blurb: m.blurb })),
+    ];
+
+    const cards = new Map<GameMode, HTMLButtonElement>();
+    for (const entry of entries) {
+      const card = el('button', 'card');
+      card.type = 'button';
+      card.dataset['mode'] = String(entry.id);
+      card.dataset['testid'] = `mode-${entry.id}`;
+      card.setAttribute('role', 'radio');
+      card.append(el('strong', 'card__label', entry.label), el('small', 'card__blurb', entry.blurb));
+      const bestForMode = persistence.bestFor(String(entry.id));
+      if (bestForMode > 0) card.append(el('em', 'card__best', `best ${bestForMode}`));
+      cards.set(entry.id, card);
+      modeList.append(card);
     }
-    overlay.dataset['open'] = 'true';
-    overlay.dataset['mode'] = next;
-  };
 
-  const hideOverlay = (): void => {
-    overlay.dataset['open'] = 'false';
-  };
+    const diffGroup = el('div', 'segmented');
+    diffGroup.setAttribute('role', 'radiogroup');
+    diffGroup.setAttribute('aria-label', 'Difficulty');
+    const diffButtons = new Map<Difficulty, HTMLButtonElement>();
+    for (const level of DIFFICULTIES) {
+      const button = el('button', 'segmented__item', level.toUpperCase());
+      button.type = 'button';
+      button.dataset['difficulty'] = level;
+      button.dataset['testid'] = `difficulty-${level}`;
+      button.setAttribute('role', 'radio');
+      diffButtons.set(level, button);
+      diffGroup.append(button);
+    }
 
-  renderOverlay('start');
+    const syncSelection = (): void => {
+      for (const [id, card] of cards) {
+        const on = id === mode;
+        card.dataset['selected'] = String(on);
+        card.setAttribute('aria-checked', String(on));
+      }
+      for (const [id, button] of diffButtons) {
+        const on = id === difficulty;
+        button.dataset['selected'] = String(on);
+        button.setAttribute('aria-checked', String(on));
+      }
+    };
 
-  // --- the start gesture -------------------------------------------------
-  // The AudioContext is constructed here, inside the gesture, never before it.
-  //
-  // CANON §8's pointerdown rule governs discrete *game* input on the pads. The
-  // start button is UI chrome, and binding it to pointerdown alone made it a
-  // silent no-op for keyboard, assistive tech, and any host that activates a
-  // button with a synthetic click. Both are bound: pointerdown so touch unlocks
-  // audio at the earliest possible gesture, click so every other path works.
-  let starting = false;
+    for (const [id, card] of cards) {
+      onActivate(card, () => {
+        if (mode === id) return;
+        mode = id;
+        syncSelection();
+        audio.cue('menuTick');
+        vibrate(12, reducedMotion);
+        const box = card.getBoundingClientRect();
+        fx.mount();
+        fx.spark(box.left + box.width / 2, box.top + box.height / 2, 6);
+      });
+    }
+    for (const [id, button] of diffButtons) {
+      onActivate(button, () => {
+        if (difficulty === id) return;
+        difficulty = id;
+        syncSelection();
+        audio.cue('menuTick');
+        vibrate(12, reducedMotion);
+      });
+    }
 
-  const beginRun = (): void => {
-    // The overlay being open is the authority on whether a start is wanted, so
-    // the click that trails a pointerdown cannot restart a live run.
-    if (starting || overlay.dataset['open'] !== 'true') return;
-    if (mode !== 'start' && mode !== 'fail' && mode !== 'blocked') return;
-    starting = true;
-    void (async () => {
-      try {
-        const state = await audio.unlock();
+    const start = el('button', 'btn btn--hero', 'PULL THE LEVER');
+    start.type = 'button';
+    start.dataset['testid'] = 'menu-start';
+
+    const note = el(
+      'p',
+      'menu__note',
+      'Mixed Type runs every mode each phase: 3 steps each, then 4, then 5.',
+    );
+
+    screen.append(
+      header,
+      el('p', 'eyebrow', 'GAME TYPE'),
+      modeList,
+      el('p', 'eyebrow', 'DIFFICULTY'),
+      diffGroup,
+      note,
+      start,
+    );
+    root.append(screen);
+    syncSelection();
+
+    let starting = false;
+    onPrime(start, () => void audio.unlock());
+    onActivate(start, () => {
+      if (starting) return;
+      starting = true;
+      void audio.unlock().then((state) => {
         if (state !== 'running') {
-          renderOverlay(
-            'blocked',
-            `MODESHIFT needs the Web Audio API. The audio context reported "${state}".`,
-          );
+          starting = false;
+          note.textContent = `Audio is required and reported "${state}". Tap again.`;
           return;
         }
-        hideOverlay();
-        engine.start();
-      } catch (error) {
-        renderOverlay('blocked', error instanceof Error ? error.message : String(error));
-      } finally {
-        starting = false;
+        audio.cue('start');
+        vibrate([30, 40, 60], reducedMotion);
+        renderGame();
+      });
+    });
+  }
+
+  // --- game ---------------------------------------------------------------
+
+  function renderGame(): void {
+    teardownGame();
+    root.dataset['screen'] = 'game';
+    root.replaceChildren();
+
+    const screen = el('main', 'screen screen--game');
+    screen.setAttribute('aria-label', 'MODESHIFT game');
+
+    const hud = el('header', 'hud');
+    const makeCell = (label: string, testid: string, initial: string): HTMLElement => {
+      const cell = el('div', 'hud__cell');
+      cell.append(el('span', 'hud__label', label));
+      const value = el('b', 'hud__value', initial);
+      value.dataset['testid'] = testid;
+      cell.append(value);
+      return cell;
+    };
+    const levelCell = makeCell('Level', 'hud-level', '1');
+    const modeCell = makeCell('Mode', 'hud-mode', '—');
+    const stepCell = makeCell('Step', 'hud-step', '0 / 0');
+    const comboCell = makeCell('Combo', 'hud-combo', '0');
+    const replayCell = makeCell('Replays', 'hud-replays', '1');
+    const retryCell = makeCell('Retries', 'hud-retries', '1');
+    hud.append(levelCell, modeCell, stepCell, comboCell, replayCell, retryCell);
+
+    const banner = el('p', 'banner', 'Watch the sequence');
+    banner.dataset['testid'] = 'banner';
+
+    const stage = el('div', 'stage');
+    stage.dataset['testid'] = 'stage';
+
+    const overlay = el('div', 'overlay');
+    overlay.dataset['testid'] = 'overlay';
+    overlay.dataset['open'] = 'false';
+    const panel = el('div', 'overlay__panel');
+    const oTitle = el('h2', 'overlay__title');
+    oTitle.dataset['testid'] = 'overlay-title';
+    const oBody = el('p', 'overlay__body');
+    oBody.dataset['testid'] = 'overlay-body';
+    const oPrimary = el('button', 'btn btn--hero', 'Play again');
+    oPrimary.type = 'button';
+    oPrimary.dataset['testid'] = 'overlay-action';
+    const oSecondary = el('button', 'btn btn--ghost', 'Main menu');
+    oSecondary.type = 'button';
+    oSecondary.dataset['testid'] = 'overlay-menu';
+    panel.append(oTitle, oBody, oPrimary, oSecondary);
+    overlay.append(panel);
+
+    const seedLine = el('footer', 'seed');
+    seedLine.dataset['testid'] = 'seed';
+
+    screen.append(hud, banner, stage, overlay, seedLine);
+    root.append(screen);
+
+    const value = (host: HTMLElement): HTMLElement => host.querySelector('.hud__value')!;
+    const levelValue = value(levelCell);
+    const modeValue = value(modeCell);
+    const stepValue = value(stepCell);
+    const comboValue = value(comboCell);
+    const replayValue = value(replayCell);
+    const retryValue = value(retryCell);
+
+    const nextEngine = new Engine({
+      registry,
+      stage,
+      audio,
+      visibility: document,
+      pinnedSeed: options.pinnedSeed ?? null,
+      reducedMotion,
+      mode,
+      difficulty,
+    });
+    engine = nextEngine;
+
+    const labelFor = (id: string): string => registry.get(id)?.label ?? id;
+
+    nextEngine.events.on('state', ({ state }) => {
+      root.dataset['state'] = state;
+      // Readability rule: every decorative effect is cleared before the
+      // sequence plays, and the FX loop is stopped outright.
+      if (state === 'PRESENTING' || state === 'LEVEL_SETUP') fx.clear();
+      if (state === 'PRESENTING') banner.textContent = 'Watch';
+      if (state === 'CAPTURING') banner.textContent = 'Your turn';
+      if (state === 'PAUSED') {
+        audio.cue('pause');
+        openOverlay('Paused', 'You left mid-run. Come back and this level replays — once.', false);
       }
-    })();
-  };
+      if (state === 'LEVEL_SETUP' && overlay.dataset['open'] === 'true') closeOverlay();
+    });
 
-  // No preventDefault here: cancelling pointerdown suppresses the button's
-  // native focus and click behaviour, which is what broke the other paths.
-  // Zoom and text selection are already handled by `touch-action: none`.
-  action.addEventListener('pointerdown', beginRun);
-  action.addEventListener('click', beginRun);
+    nextEngine.events.on('level', ({ level, steps, seed, plan, substituted, scheduled }) => {
+      levelValue.textContent = String(level);
+      stepValue.textContent = `0 / ${steps}`;
+      const unique = [...new Set(plan)];
+      modeValue.textContent =
+        unique.length === 1 ? labelFor(unique[0]!) : `Mixed · ${unique.length}`;
+      modeValue.dataset['substituted'] = String(substituted);
+      if (substituted && scheduled) modeValue.title = `${scheduled} unavailable`;
+      seedLine.textContent = `seed ${seed} · ${String(mode)} · ${difficulty}`;
+    });
 
-  // --- engine wiring -----------------------------------------------------
-  const labelFor = (id: string): string => registry.get(id)?.label ?? id;
+    nextEngine.events.on('present', ({ index, total, modalityId }) => {
+      stepValue.textContent = `${index + 1} / ${total}`;
+      modeValue.textContent = labelFor(modalityId);
+    });
 
-  engine.events.on('state', ({ state }: { state: EngineState }) => {
-    root.dataset['state'] = state;
-    // touch-action is suppressed only while a run is live (CANON §8).
-    root.dataset['running'] = state === 'BOOT' || state === 'FAIL' ? 'false' : 'true';
-    if (state === 'PAUSED') renderOverlay('paused');
-    if (state === 'PRESENTING' && overlay.dataset['open'] === 'true' && mode === 'paused') {
-      hideOverlay();
+    nextEngine.events.on('capture', ({ index, total, modalityId }) => {
+      stepValue.textContent = `${index + 1} / ${total}`;
+      modeValue.textContent = labelFor(modalityId);
+    });
+
+    nextEngine.events.on('score', ({ pass, accuracy, combo, modalityId }) => {
+      comboValue.textContent = String(combo);
+      persistence.recordScore(modalityId, pass, accuracy);
+      if (!pass) return;
+      audio.cue('correct', combo);
+      vibrate(HAPTIC_STEP, reducedMotion);
+      // Correct step: a short burst only, never a screen-filling effect.
+      const rect = stage.getBoundingClientRect();
+      fx.mount();
+      fx.spark(rect.left + rect.width / 2, rect.top + rect.height * 0.5, 6);
+    });
+
+    nextEngine.events.on('quota', ({ replays, retries }) => {
+      replayValue.textContent = String(replays);
+      retryValue.textContent = String(retries);
+    });
+
+    nextEngine.events.on('levelUp', ({ level }) => {
+      const isBest = persistence.recordLevel(String(mode), level);
+      audio.cue('levelUp', level);
+      vibrate(HAPTIC_LEVEL, reducedMotion);
+      fx.mount();
+      fx.jackpot(1 + level * 0.12);
+      banner.textContent = isBest ? `NEW BEST · LEVEL ${level}` : `LEVEL ${level} CLEAR`;
+      root.dataset['celebrate'] = 'true';
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => delete root.dataset['celebrate']);
+      });
+    });
+
+    nextEngine.events.on('fail', ({ reason, level }) => {
+      audio.cue('fail');
+      vibrate(HAPTIC_FAIL, reducedMotion);
+      fx.mount();
+      fx.bust();
+      const why =
+        reason === 'timeout'
+          ? 'Out of time.'
+          : reason === 'focus-lost'
+            ? 'You left the game twice.'
+            : 'Wrong step.';
+      openOverlay('RUN OVER', `${why} You reached level ${level}.`, true);
+    });
+
+    // The overlay opens mid-tap on a wrong pad, so its buttons appear under a
+    // finger that is already down. Ignore the trailing click.
+    const overlayGuard = justAppearedGuard();
+
+    function openOverlay(title: string, body: string, showActions: boolean): void {
+      oTitle.textContent = title;
+      oBody.textContent = body;
+      oPrimary.hidden = !showActions;
+      oSecondary.hidden = !showActions;
+      overlay.dataset['open'] = 'true';
+      overlayGuard.arm();
     }
-  });
 
-  engine.events.on('level', ({ level, steps, seed, plan, scheduled, substituted }) => {
-    levelValue.textContent = String(level);
-    stepValue.textContent = `0 / ${steps}`;
-    // The HUD names the modality actually in play, not the one the schedule
-    // nominally asked for (decisions/0004).
-    const unique = [...new Set(plan)];
-    modeValue.textContent =
-      unique.length === 1 ? labelFor(unique[0]!) : `Mixed (${unique.length})`;
-    modeValue.dataset['substituted'] = String(substituted);
-    if (substituted && scheduled) modeValue.title = `${scheduled} not yet available`;
-    seedLine.textContent = `seed ${seed}`;
-  });
+    function closeOverlay(): void {
+      overlay.dataset['open'] = 'false';
+    }
 
-  engine.events.on('present', ({ index, total, modalityId }) => {
-    stepValue.textContent = `${index + 1} / ${total}`;
-    modeValue.textContent = labelFor(modalityId);
-  });
+    onActivate(oPrimary, () => {
+      if (overlay.dataset['open'] !== 'true' || oPrimary.hidden) return;
+      if (overlayGuard.blocked()) return;
+      closeOverlay();
+      audio.cue('start');
+      renderGame();
+    });
+    onActivate(oSecondary, () => {
+      if (overlay.dataset['open'] !== 'true' || oSecondary.hidden) return;
+      if (overlayGuard.blocked()) return;
+      audio.cue('menuSelect');
+      renderMenu();
+    });
 
-  engine.events.on('capture', ({ index, total, modalityId }) => {
-    stepValue.textContent = `${index + 1} / ${total}`;
-    modeValue.textContent = labelFor(modalityId);
-  });
+    nextEngine.mount();
+    nextEngine.start();
+  }
 
-  engine.events.on('quota', ({ replays, retries }) => {
-    replayValue.textContent = String(replays);
-    retryValue.textContent = String(retries);
-  });
+  renderSplash();
 
-  engine.events.on('fail', ({ reason, level }) => {
-    const why =
-      reason === 'timeout'
-        ? 'Ran out of time.'
-        : reason === 'focus-lost'
-          ? 'You left the game twice.'
-          : 'Wrong step.';
-    renderOverlay('fail', `${why} You reached level ${level}.`);
-  });
+  return {
+    destroy: () => {
+      teardownGame();
+      fx.destroy();
+      root.replaceChildren();
+    },
+  };
 }

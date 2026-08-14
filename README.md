@@ -3,9 +3,10 @@
 A mobile-first Simon Says game whose challenge modality rotates between colour,
 number, shape, sound, and traced path.
 
-**Phase A is complete.** Levels 1–2 are playable end to end; the engine FSM,
-seeded RNG, registry, data-driven schedule, and the colour and number modalities
-are in. See [`docs/PHASE-A-REPORT.md`](docs/PHASE-A-REPORT.md).
+All six modalities are in — colour, number, shape, sound, trace, rhythm — with a
+splash screen, a mode/difficulty menu, casino FX on a hard performance budget,
+haptics, and persistence. See [`docs/PHASE-A-REPORT.md`](docs/PHASE-A-REPORT.md)
+and [`docs/UAT-REPORT.md`](docs/UAT-REPORT.md).
 
 ## Ground rules
 
@@ -56,7 +57,8 @@ handling.
 ```
 CANON.md          single source of truth
 decisions/        ADRs — one per resolved ambiguity or deviation
-src/core/         engine FSM, RNG, clock, abort ownership, registry, schedule, audio
+src/core/         engine FSM, RNG, clock, abort ownership, registry, modes, audio
+src/fx/           canvas particle system, on a tested budget
 src/modalities/   the plugins; adding one costs a file plus a registry line
 src/ui/           app shell, HUD, overlay, the start gesture
 tests/            Vitest: unit, integration (fake timers), leak

@@ -1,0 +1,18 @@
+.grid--shape .grid__pad {
+  background: #17203a;
+  border: 2px solid #2c3a5e;
+  display: grid;
+  place-items: center;
+}
+.grid--shape .grid__glyph {
+  width: 58%;
+  height: 58%;
+  fill: #b9d4ff;
+}
+.grid--shape .grid__pad[data-presenting='true'] {
+  background: #2a4a86;
+  border-color: #7cc6ff;
+}
+.grid--shape .grid__pad[data-presenting='true'] .grid__glyph {
+  fill: #ffffff;
+}

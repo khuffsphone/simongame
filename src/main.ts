@@ -1,6 +1,6 @@
 import { createWebAudioService } from './core/audio';
-import { Engine } from './core/engine';
 import { normalizeSeed } from './core/rng';
+import { Fx } from './fx/fx';
 import { createDefaultRegistry } from './modalities';
 import { createApp } from './ui/app';
 import './styles.css';
@@ -10,24 +10,13 @@ if (!root) throw new Error('#app container missing from index.html');
 
 // ?seed= pins a deterministic run for repro (CANON §5).
 const pinnedSeed = normalizeSeed(new URLSearchParams(window.location.search).get('seed'));
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const registry = createDefaultRegistry();
-const audio = createWebAudioService();
-
-// The stage is created here because the engine needs it before the app shell
-// that displays it exists.
-const stage = document.createElement('main');
-stage.className = 'stage';
-stage.dataset['testid'] = 'stage';
-
-const engine = new Engine({
-  registry,
-  stage,
-  audio,
-  visibility: document,
+createApp({
+  root,
+  audio: createWebAudioService(),
+  registry: createDefaultRegistry(),
+  fx: new Fx({ reducedMotion }),
   pinnedSeed,
-  reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  reducedMotion,
 });
-
-createApp({ root, stage, engine, audio, registry });
-engine.mount();

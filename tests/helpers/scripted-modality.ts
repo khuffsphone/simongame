@@ -11,6 +11,7 @@ import type { CaptureResult, Modality, ModalityServices, StepScore } from '../..
 export class ScriptedModality implements Modality<number> {
   static readonly id = 'scripted';
   static readonly label = 'Scripted';
+  static readonly blurb = 'Test double.';
   static readonly minPresentMs = 10;
   static readonly captureTimeoutMs = 1000;
   static readonly cardinality = 4;

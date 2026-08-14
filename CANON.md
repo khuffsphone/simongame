@@ -86,6 +86,12 @@ loop, so one sequence can interleave modalities step by step.
 | `captureStep(signal)` | Resolve with `{value, meta}` on player input. Rejects `AbortError` if aborted. **Never resolves on its own timer** — the engine owns the timeout. |
 | `scoreStep(input, expected)` | `{pass, accuracy}`. Pure. `input` is the `captureStep` result; `expected` is the `generateValue` result. `accuracy` ∈ [0, 1]. |
 
+The contract is generic over **two** types, `Modality<V, C>`: `V` is what
+`generateValue` produces and `scoreStep` expects, `C` is what `captureStep`
+returns. For the discrete modalities they are the same. For trace they are not —
+the value is a glyph name, the capture is a point array — and collapsing them
+into one parameter forced a lie in the type (`decisions/0011`).
+
 Rules:
 
 - Every async method takes an `AbortSignal` and rejects with a `DOMException`
@@ -153,6 +159,24 @@ against the registry: a scheduled modality that is not registered is
 substituted from the registered pool, deterministically, via the run's RNG.
 See `decisions/0004`. This is what keeps levels 3–5 playable while shape,
 sound, and trace are still unbuilt.
+
+### Game modes and difficulty — §4a
+
+| Mode | Behaviour |
+| --- | --- |
+| Classic Climb | The level schedule above. |
+| Mixed Type | Every registered modality, every level, **level + 2** steps each: 3 apiece in phase 1, 4 in phase 2, 5 in phase 3. Grouped by modality, in registration order. |
+| *Modality* only | Every step is that modality, at the classic step count. One mode per registered modality, generated from the registry — adding a modality adds its mode for free. |
+
+Difficulty scales two things and nothing else:
+
+| | easy | normal | hard |
+| --- | --- | --- | --- |
+| presentation multiplier | 1.20 | 1.00 | 0.82 |
+| capture-timeout multiplier | 1.40 | 1.00 | 0.85 |
+
+Easy presents *slower* and allows *longer* to answer. Difficulty never changes
+step counts, the schedule, or scoring thresholds.
 
 ### Discrete cardinality
 
@@ -260,6 +284,14 @@ Two quotas. Both are surfaced in the HUD at all times, not just when spent.
 - Where Web Audio is unavailable, the service reports state `unavailable` and
   every play call is a no-op. It never throws.
 
+### Cue set
+
+`splash`, `menuTick`, `menuSelect`, `start` (slot-pull), `correct` (pitch climbs
+with the combo, so a streak sounds like one), `levelUp` (arpeggio climb plus
+synthesized applause, scaled by level), `fail` (descending buzzer), `pause`,
+`resume`. A `DynamicsCompressor` sits before the destination so the level-up
+stack is loud without clipping.
+
 ---
 
 ## 10. Timing and abort
@@ -305,10 +337,9 @@ Trace ships in Phase B. The algorithm is fixed here first, per the brief.
 
 ### Templates
 
-Four unit glyphs, each a polyline in a normalized unit box: `line` (left to
-right), `vee` (down-right then up-right), `ell` (down then right), `arc` (a
-half-circle, clockwise from the top). Direction is significant — a glyph
-traced backwards is a different glyph and must fail.
+Six unit glyphs, each a polyline in a normalized unit box: `line`, `vee`, `ell`,
+`arc`, `zigzag`, `wave`. Direction is significant — a glyph traced backwards is
+a different glyph and must fail.
 
 ### Capture
 
@@ -374,3 +405,37 @@ Normative — these must hold at every phase boundary.
   a second backgrounding ends the run.
 - **Leak**: after 50 simulated levels, live `AbortController` count and DOM
   listener count are back to their pre-run baseline.
+
+
+---
+
+## 14. FX budget
+
+Decoration must never cost readability or frame rate. These are testable rules,
+not aspirations (`tests/fx.test.ts`).
+
+- The rAF loop **starts only when a particle exists** and **stops the frame
+  after the last one dies**. No idle loop, ever.
+- `clear()` empties the field and cancels the frame synchronously. The UI calls
+  it on entering `LEVEL_SETUP` and `PRESENTING`.
+- Particle count is capped at 220, and at 40 under `prefers-reduced-motion`.
+- Device pixel ratio is capped at 1.5.
+- **No `shadowBlur`.** It is the most expensive canvas operation on mobile and
+  the first thing to remove at high particle counts.
+- Intensity ladder: splash high · menu high · selection medium · correct step a
+  6-particle spark · level complete high · failure brief · **presentation and
+  capture: nothing**.
+- CSS decorative animation is suppressed under
+  `[data-state='PRESENTING']` and `[data-state='CAPTURING']`.
+
+## 15. Rhythm
+
+- A pattern is a list of inter-tap intervals in ms; `n` intervals means `n + 1`
+  beats. Presentation length is defined by the pattern, not by the engine pace.
+- Capture ends on **silence** (900 ms after the last tap), never on a fixed tap
+  count — `captureStep` is given no knowledge of what was expected, and a
+  fixed-count terminator silently truncates longer patterns.
+- Scoring is tempo-invariant: both lists are converted to proportions of their
+  own total, so the right rhythm played fast still passes.
+- `accuracy = shape × (1 − countPenalty)`; `pass` additionally **requires the
+  interval count to match exactly** (`decisions/0013`).

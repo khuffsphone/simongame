@@ -26,8 +26,15 @@ function mountModality(instance: Modality<number>): HTMLElement {
 }
 
 describe('registry', () => {
-  it('registers colour and number, in HUD order', () => {
-    expect(createDefaultRegistry().ids()).toEqual(['color', 'number']);
+  it('registers all six modalities, in menu order', () => {
+    expect(createDefaultRegistry().ids()).toEqual([
+      'color',
+      'number',
+      'shape',
+      'sound',
+      'trace',
+      'rhythm',
+    ]);
   });
 
   it('refuses a duplicate id', () => {
@@ -36,7 +43,7 @@ describe('registry', () => {
   });
 
   it('require() names the missing modality', () => {
-    expect(() => createDefaultRegistry().require('trace')).toThrow(/"trace" is not registered/);
+    expect(() => createDefaultRegistry().require('smell')).toThrow(/"smell" is not registered/);
   });
 });
 

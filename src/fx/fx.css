@@ -1,0 +1,17 @@
+.fx-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 40;
+}
+
+/* Readability rule: FX never competes with the sequence. During presentation
+   the canvas is pushed behind the playfield and dimmed; the engine also clears
+   it outright, so this is belt and braces. */
+[data-state='PRESENTING'] .fx-canvas,
+[data-state='CAPTURING'] .fx-canvas {
+  opacity: 0.22;
+  z-index: 1;
+}

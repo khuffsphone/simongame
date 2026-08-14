@@ -14,6 +14,7 @@ const PADS = [
 export class ColorModality extends DiscreteGridModality {
   static readonly id = 'color';
   static readonly label = 'Colour';
+  static readonly blurb = 'Four pads. The original.';
   static readonly minPresentMs = 320;
   static readonly captureTimeoutMs = 3000;
 

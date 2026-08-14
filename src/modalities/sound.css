@@ -1,0 +1,39 @@
+.grid--sound .grid__pad {
+  background: linear-gradient(160deg, #1b1140, #241a5e);
+  border: 2px solid #3d2f7a;
+  display: grid;
+  place-items: center;
+  gap: 0.4rem;
+  grid-template-rows: 1fr auto;
+  padding: 12% 10%;
+}
+.grid__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 8%;
+  width: 70%;
+  height: 100%;
+}
+.grid__bars i {
+  flex: 1;
+  height: var(--h);
+  border-radius: 999px;
+  background: #9d8bff;
+}
+.grid__note {
+  font-size: 0.8rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #b3a6ff;
+}
+
+/* Presentation must NOT reveal which pad: the whole grid pulses instead. */
+.grid--sound[data-listening='true'] {
+  outline: 2px solid #9d8bff;
+  outline-offset: 6px;
+  border-radius: 1rem;
+}
+.grid--sound[data-listening='true'] .grid__pad {
+  opacity: 0.62;
+}
